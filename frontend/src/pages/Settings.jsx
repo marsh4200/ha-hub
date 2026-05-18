@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Download, KeyRound, RefreshCw, GitBranch, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Download, KeyRound, RefreshCw, GitBranch, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -8,19 +8,46 @@ export default function Settings() {
   const [pw, setPw] = useState({ currentPassword: '', newPassword: '', confirm: '' });
   const [msg, setMsg] = useState(''); const [err, setErr] = useState('');
 
-  // Update state
   const [updateInfo, setUpdateInfo] = useState(null);
   const [checking, setChecking] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [updateMsg, setUpdateMsg] = useState('');
+  const pollRef = useRef(null);
 
   async function loadUpdateStatus() {
     try {
       const { data } = await api.get('/system/update/status');
-      setUpdateInfo({ local: data.local, state: data.state, repo: data.repo, remote: null });
+      setUpdateInfo(prev => ({ ...(prev || {}), local: data.local, state: data.state, repo: data.repo, remote: prev?.remote || null }));
+      // If an update is in progress, keep polling
+      if (data.state?.status === 'running' || data.state?.status === 'requested') {
+        setUpdating(true);
+        if (!pollRef.current) startPolling();
+      } else if (data.state?.status === 'success') {
+        setUpdating(false);
+        stopPolling();
+      } else if (data.state?.status === 'error') {
+        setUpdating(false);
+        stopPolling();
+      }
     } catch (_) {}
   }
-  useEffect(() => { if (user?.role === 'ADMIN') loadUpdateStatus(); }, [user]);
+  useEffect(() => { if (user?.role === 'ADMIN') loadUpdateStatus(); return stopPolling; }, [user]);
+
+  function startPolling() {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const { data } = await api.get('/system/update/status');
+        setUpdateInfo(prev => ({ ...(prev || {}), local: data.local, state: data.state, repo: data.repo }));
+        if (data.state?.status === 'success' || data.state?.status === 'error' || data.state?.status === 'idle') {
+          stopPolling(); setUpdating(false);
+        }
+      } catch (_) {
+        // API likely restarting — keep polling
+      }
+    }, 2000);
+  }
+  function stopPolling() { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }
 
   async function checkUpdates() {
     setChecking(true); setUpdateMsg('');
@@ -33,14 +60,16 @@ export default function Settings() {
   }
 
   async function runUpdate() {
-    if (!confirm('Update HA-Hub from GitHub now?\n\nThe portal will be unavailable for 1–2 minutes while it rebuilds.')) return;
+    if (!confirm('Update HA-Hub from GitHub now?\n\nThe portal will be unavailable for 1–2 minutes.')) return;
     setUpdating(true); setUpdateMsg('');
     try {
       await api.post('/system/update');
-      setUpdateMsg('Update requested — the portal will restart shortly. Wait ~2 min and reload this page.');
+      setUpdateMsg('');
+      startPolling();
     } catch (e) {
       setUpdateMsg(e.response?.data?.error || 'Update failed');
-    } finally { setUpdating(false); }
+      setUpdating(false);
+    }
   }
 
   async function changePw(e) {
@@ -60,6 +89,10 @@ export default function Settings() {
     a.href = url; a.download = `ha-hub-export-${Date.now()}.json`; a.click();
     URL.revokeObjectURL(url);
   }
+
+  const state = updateInfo?.state || {};
+  const isRunning = state.status === 'running' || state.status === 'requested';
+  const progress = state.progress ?? 0;
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -98,13 +131,41 @@ export default function Settings() {
                   <div className="text-amber-400 text-xs flex items-center gap-1 mt-2"><AlertCircle size={12}/>{updateInfo.remote.error}</div>
                 )}
               </div>
-              {updateMsg && <div className={`text-sm rounded-lg p-2 ${updateMsg.startsWith('Update requested') ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>{updateMsg}</div>}
+
+              {/* Progress bar */}
+              {(isRunning || state.status === 'success' || state.status === 'error') && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    {isRunning && <Loader2 size={14} className="animate-spin text-brand"/>}
+                    {state.status === 'success' && <CheckCircle2 size={14} className="text-emerald-400"/>}
+                    {state.status === 'error' && <AlertCircle size={14} className="text-red-400"/>}
+                    <span className="text-slate-300">{state.message || state.step || state.status}</span>
+                    <span className="ml-auto text-slate-500">{progress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-bg-soft rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        state.status === 'error' ? 'bg-red-500' :
+                        state.status === 'success' ? 'bg-emerald-500' : 'bg-brand'
+                      }`}
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  {state.status === 'success' && (
+                    <p className="text-xs text-emerald-400">Refresh the page to load the new version.</p>
+                  )}
+                </div>
+              )}
+
+              {updateMsg && <div className="text-sm rounded-lg p-2 bg-red-500/10 text-red-400">{updateMsg}</div>}
+
               <div className="flex gap-2 justify-end">
-                <button className="btn-secondary" onClick={checkUpdates} disabled={checking}>
+                <button className="btn-secondary" onClick={checkUpdates} disabled={checking || updating}>
                   <RefreshCw size={14} className={checking ? 'animate-spin' : ''}/>{checking ? 'Checking…' : 'Check for updates'}
                 </button>
                 <button className="btn-primary" onClick={runUpdate} disabled={updating}>
-                  <CheckCircle2 size={14}/>{updating ? 'Requesting…' : 'Update now'}
+                  {updating ? <Loader2 size={14} className="animate-spin"/> : <CheckCircle2 size={14}/>}
+                  {updating ? 'Updating…' : 'Update now'}
                 </button>
               </div>
               <p className="text-xs text-slate-500">Pulls the latest code from GitHub and rebuilds the containers. The portal will be unavailable for 1–2 minutes.</p>
@@ -123,7 +184,7 @@ export default function Settings() {
 
       <div className="card p-5 text-sm text-slate-400">
         <div className="text-slate-300 font-medium mb-2">About</div>
-        <div>HA-Hub v1.1.0</div>
+        <div>HA-Hub v{updateInfo?.local?.version || '1.3.0'}</div>
         <div>Logged in as <span className="text-slate-200">{user?.username}</span> ({user?.role})</div>
         <a className="text-brand hover:underline" href="/api/docs" target="_blank" rel="noreferrer">API documentation →</a>
       </div>

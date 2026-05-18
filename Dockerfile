@@ -22,6 +22,13 @@ COPY backend/ ./backend/
 COPY --from=backend-deps /app/backend/node_modules ./backend/node_modules
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
+# FIX v1.3: copy VERSION + scripts into image so the in-portal updater can read them
+COPY VERSION ./VERSION
+COPY scripts/ ./scripts/
+
+# Ensure the data directory exists (volume mount point)
+RUN mkdir -p /app/data
+
 ENV NODE_ENV=production
 EXPOSE 4000
 

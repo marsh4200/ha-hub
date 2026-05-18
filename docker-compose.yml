@@ -36,10 +36,10 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
       UPDATE_REPO: ${UPDATE_REPO:-https://github.com/marsh4200/ha-hub.git}
       UPDATE_BRANCH: ${UPDATE_BRANCH:-main}
-    # FIX v1.2: volume mounted at /app/data (NOT /app — that was shadowing the entire app code!)
+    # v1.3: mount at /app/data only — NOT /app (that would shadow code)
     volumes:
-      - ha-hub-update-flag:/app/data
+      - ha-hub-data:/app/data
 
 volumes:
   ha-hub-db:
-  ha-hub-update-flag:
+  ha-hub-data:
