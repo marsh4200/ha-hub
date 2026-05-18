@@ -1,14 +1,16 @@
-// Runs an in-place update: git pull on the host, then rebuild & restart containers.
-// IMPORTANT: this runs inside the container — it triggers an update script on the host
-// via a shared volume + flag file, OR (simpler) writes status and tells the user to run
-// update.sh. We use the "flag file" pattern so the container can request its own rebuild.
+// Runs an in-place update by writing a flag file the host watcher picks up.
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
-const execFileP = promisify(execFile);
 
-const STATE_FILE = '/app/update-state.json';
+// FIX v1.2: flag/state files live in /app/data (the only volume-mounted dir).
+// Previously these were at /app which shadowed the entire app code.
+const DATA_DIR   = '/app/data';
+const FLAG_FILE  = path.join(DATA_DIR, 'update-requested');
+const STATE_FILE = path.join(DATA_DIR, 'update-state.json');
+
+function ensureDir() {
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
+}
 
 function readState() {
   try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); }
@@ -16,22 +18,29 @@ function readState() {
 }
 
 function writeState(s) {
-  try { fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2)); } catch (_) {}
+  try { ensureDir(); fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2)); }
+  catch (_) {}
 }
 
 async function currentCommit() {
-  // The container has the source baked in — we read VERSION + commit hash if present
-  try {
-    const ver = fs.readFileSync(path.resolve(__dirname, '../../../VERSION'), 'utf8').trim();
-    return { version: ver };
-  } catch {
-    return { version: 'unknown' };
+  // VERSION lives at the repo root. From backend/src/services/updater.js that's
+  // ../../../../VERSION when bundled — try a few sensible paths.
+  const tryPaths = [
+    path.resolve(__dirname, '../../../VERSION'),
+    path.resolve(__dirname, '../../../../VERSION'),
+    '/app/VERSION',
+    '/VERSION',
+  ];
+  for (const p of tryPaths) {
+    try {
+      const ver = fs.readFileSync(p, 'utf8').trim();
+      if (ver) return { version: ver };
+    } catch (_) {}
   }
+  return { version: 'unknown' };
 }
 
-// Fetch latest commit from GitHub's API without needing git in the container
 async function checkRemote(repoUrl) {
-  // Convert https://github.com/USER/REPO.git → API URL
   const m = (repoUrl || '').match(/github\.com[:/](.+?)\/(.+?)(?:\.git)?$/i);
   if (!m) return { error: 'Unsupported repo URL — only github.com is supported' };
   const owner = m[1], repo = m[2];
@@ -53,14 +62,13 @@ async function checkRemote(repoUrl) {
   }
 }
 
-// Request an update by writing a flag file the host watcher picks up.
 function requestUpdate() {
-  const flag = '/app/update-requested';
   const state = readState();
   if (state.status === 'running') return { error: 'Update already in progress' };
   writeState({ status: 'requested', message: 'Update requested', updatedAt: new Date(), commit: null });
   try {
-    fs.writeFileSync(flag, String(Date.now()));
+    ensureDir();
+    fs.writeFileSync(FLAG_FILE, String(Date.now()));
     return { ok: true };
   } catch (e) {
     writeState({ status: 'error', message: e.message, updatedAt: new Date(), commit: null });

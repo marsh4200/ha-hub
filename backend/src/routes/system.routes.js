@@ -28,8 +28,6 @@ router.get('/export', requireAuth, requireRole('ADMIN'), async (req, res) => {
   res.json({ exportedAt: new Date(), users, clients: sanitizedClients, permissions });
 });
 
-// --- Update endpoints (admin only) ---
-
 router.get('/update/status', requireAuth, requireRole('ADMIN'), async (req, res) => {
   const local = await currentCommit();
   const state = readState();
