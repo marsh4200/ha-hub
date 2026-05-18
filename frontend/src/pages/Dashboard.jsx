@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, ExternalLink, Activity, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
 import api from '../services/api';
 import { useSocket } from '../hooks/useSocket';
+import { useNow } from '../hooks/useNow';
 import StatusBadge from '../components/StatusBadge.jsx';
 
-function relTime(d) {
+function relTime(d, now) {
   if (!d) return 'never';
-  const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
-  if (s < 60) return `${s}s ago`;
+  const s = Math.floor((now - new Date(d).getTime()) / 1000);
+  if (s < 5)   return 'just now';
+  if (s < 60)  return `${s}s ago`;
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
@@ -18,18 +20,29 @@ export default function Dashboard() {
   const [stats, setStats] = useState({ total: 0, online: 0, offline: 0, unknown: 0 });
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
+  const now = useNow(1000); // ticks every second → relTime updates live
 
   async function load() {
-    const [c, s] = await Promise.all([api.get('/clients'), api.get('/system/stats')]);
-    setClients(c.data.clients);
-    setStats(s.data);
+    try {
+      const [c, s] = await Promise.all([api.get('/clients'), api.get('/system/stats')]);
+      setClients(c.data.clients);
+      setStats(s.data);
+    } catch (_) { /* update may be in progress */ }
   }
   useEffect(() => { load(); }, []);
+
+  // Light refresh every 10s as a safety net even if sockets are unhealthy
+  useEffect(() => {
+    const id = setInterval(load, 10_000);
+    return () => clearInterval(id);
+  }, []);
 
   useSocket((ev, payload) => {
     if (ev === 'client:update') {
       setClients(prev => prev.map(c => c.id === payload.id ? { ...c, ...payload } : c));
       api.get('/system/stats').then(r => setStats(r.data)).catch(() => {});
+    } else if (ev === 'reconnect') {
+      load();
     }
   });
 
@@ -47,9 +60,15 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-slate-400 text-sm">Status of your Home Assistant instances</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <p className="text-slate-400 text-sm">Live status of your Home Assistant instances</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <span className="dot dot-online"></span>
+          <span>Live</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -85,7 +104,7 @@ export default function Dashboard() {
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
               <div><div className="text-slate-500">HA Version</div><div className="text-slate-200">{c.haVersion || '—'}</div></div>
-              <div><div className="text-slate-500">Last seen</div><div className="text-slate-200">{relTime(c.lastSeenAt)}</div></div>
+              <div><div className="text-slate-500">Last seen</div><div className="text-slate-200">{relTime(c.lastSeenAt, now)}</div></div>
             </div>
             {c.tags?.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1">

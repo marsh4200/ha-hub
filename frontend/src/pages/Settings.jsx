@@ -1,73 +1,47 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, KeyRound, RefreshCw, GitBranch, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useUpdate } from '../context/UpdateContext.jsx';
 
 export default function Settings() {
   const { user } = useAuth();
+  const { state: updateState, updating, refresh: refreshUpdate, setUpdating } = useUpdate();
+
   const [pw, setPw] = useState({ currentPassword: '', newPassword: '', confirm: '' });
   const [msg, setMsg] = useState(''); const [err, setErr] = useState('');
 
-  const [updateInfo, setUpdateInfo] = useState(null);
+  const [info, setInfo] = useState(null); // { local, remote, repo }
   const [checking, setChecking] = useState(false);
-  const [updating, setUpdating] = useState(false);
-  const [updateMsg, setUpdateMsg] = useState('');
-  const pollRef = useRef(null);
+  const [requestErr, setRequestErr] = useState('');
 
-  async function loadUpdateStatus() {
+  async function loadInfo() {
     try {
       const { data } = await api.get('/system/update/status');
-      setUpdateInfo(prev => ({ ...(prev || {}), local: data.local, state: data.state, repo: data.repo, remote: prev?.remote || null }));
-      // If an update is in progress, keep polling
-      if (data.state?.status === 'running' || data.state?.status === 'requested') {
-        setUpdating(true);
-        if (!pollRef.current) startPolling();
-      } else if (data.state?.status === 'success') {
-        setUpdating(false);
-        stopPolling();
-      } else if (data.state?.status === 'error') {
-        setUpdating(false);
-        stopPolling();
-      }
+      setInfo({ local: data.local, repo: data.repo, remote: info?.remote || null });
     } catch (_) {}
   }
-  useEffect(() => { if (user?.role === 'ADMIN') loadUpdateStatus(); return stopPolling; }, [user]);
-
-  function startPolling() {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const { data } = await api.get('/system/update/status');
-        setUpdateInfo(prev => ({ ...(prev || {}), local: data.local, state: data.state, repo: data.repo }));
-        if (data.state?.status === 'success' || data.state?.status === 'error' || data.state?.status === 'idle') {
-          stopPolling(); setUpdating(false);
-        }
-      } catch (_) {
-        // API likely restarting — keep polling
-      }
-    }, 2000);
-  }
-  function stopPolling() { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }
+  useEffect(() => { if (user?.role === 'ADMIN') loadInfo(); /* eslint-disable-next-line */ }, [user]);
 
   async function checkUpdates() {
-    setChecking(true); setUpdateMsg('');
+    setChecking(true); setRequestErr('');
     try {
       const { data } = await api.get('/system/update/check');
-      setUpdateInfo(prev => ({ ...prev, local: data.local, remote: data.remote, repo: data.repo }));
+      setInfo(prev => ({ ...(prev||{}), local: data.local, remote: data.remote, repo: data.repo }));
     } catch (e) {
-      setUpdateMsg(e.response?.data?.error || 'Check failed');
+      setRequestErr(e.response?.data?.error || 'Check failed');
     } finally { setChecking(false); }
   }
 
   async function runUpdate() {
-    if (!confirm('Update HA-Hub from GitHub now?\n\nThe portal will be unavailable for 1–2 minutes.')) return;
-    setUpdating(true); setUpdateMsg('');
+    if (!confirm('Update HA-Hub from GitHub now?\n\nThe portal will briefly disconnect while it rebuilds. You will stay logged in and the page will reload automatically when done.')) return;
+    setRequestErr('');
+    setUpdating(true);            // tell api.js: don't kick out on 401/network
     try {
       await api.post('/system/update');
-      setUpdateMsg('');
-      startPolling();
+      await refreshUpdate();      // immediately pull the state file
     } catch (e) {
-      setUpdateMsg(e.response?.data?.error || 'Update failed');
+      setRequestErr(e.response?.data?.error || 'Update request failed');
       setUpdating(false);
     }
   }
@@ -90,9 +64,9 @@ export default function Settings() {
     URL.revokeObjectURL(url);
   }
 
-  const state = updateInfo?.state || {};
-  const isRunning = state.status === 'running' || state.status === 'requested';
-  const progress = state.progress ?? 0;
+  const s = updateState || {};
+  const isRunning = s.status === 'running' || s.status === 'requested';
+  const progress = s.progress ?? 0;
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -116,48 +90,52 @@ export default function Settings() {
       {user?.role === 'ADMIN' && (
         <div className="card p-5">
           <h2 className="font-medium mb-3 flex items-center gap-2"><GitBranch size={16}/>Updates</h2>
-          {updateInfo ? (
+          {info ? (
             <div className="space-y-3">
               <div className="text-sm space-y-1">
-                <div className="flex justify-between"><span className="text-slate-400">Installed version</span><span className="font-mono text-slate-200">{updateInfo.local?.version || 'unknown'}</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Repository</span><a className="text-brand hover:underline text-xs truncate max-w-xs" href={updateInfo.repo?.replace('.git','')} target="_blank" rel="noreferrer">{updateInfo.repo}</a></div>
-                {updateInfo.remote && !updateInfo.remote.error && (
+                <div className="flex justify-between"><span className="text-slate-400">Installed version</span><span className="font-mono text-slate-200">{info.local?.version || 'unknown'}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Repository</span><a className="text-brand hover:underline text-xs truncate max-w-xs" href={info.repo?.replace('.git','')} target="_blank" rel="noreferrer">{info.repo}</a></div>
+                {info.remote && !info.remote.error && (
                   <>
-                    <div className="flex justify-between"><span className="text-slate-400">Latest commit</span><span className="font-mono text-slate-200">{updateInfo.remote.sha}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">Message</span><span className="text-slate-300 text-xs truncate max-w-xs">{updateInfo.remote.message}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Latest commit</span><span className="font-mono text-slate-200">{info.remote.sha}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Message</span><span className="text-slate-300 text-xs truncate max-w-xs">{info.remote.message}</span></div>
                   </>
                 )}
-                {updateInfo.remote?.error && (
-                  <div className="text-amber-400 text-xs flex items-center gap-1 mt-2"><AlertCircle size={12}/>{updateInfo.remote.error}</div>
+                {info.remote?.error && (
+                  <div className="text-amber-400 text-xs flex items-center gap-1 mt-2"><AlertCircle size={12}/>{info.remote.error}</div>
                 )}
               </div>
 
-              {/* Progress bar */}
-              {(isRunning || state.status === 'success' || state.status === 'error') && (
-                <div className="space-y-2">
+              {(isRunning || s.status === 'success' || s.status === 'error') && (
+                <div className="space-y-2 border-t border-line pt-3">
                   <div className="flex items-center gap-2 text-xs">
                     {isRunning && <Loader2 size={14} className="animate-spin text-brand"/>}
-                    {state.status === 'success' && <CheckCircle2 size={14} className="text-emerald-400"/>}
-                    {state.status === 'error' && <AlertCircle size={14} className="text-red-400"/>}
-                    <span className="text-slate-300">{state.message || state.step || state.status}</span>
-                    <span className="ml-auto text-slate-500">{progress}%</span>
+                    {s.status === 'success' && <CheckCircle2 size={14} className="text-emerald-400"/>}
+                    {s.status === 'error' && <AlertCircle size={14} className="text-red-400"/>}
+                    <span className="text-slate-300">{s.message || s.step || s.status}</span>
+                    <span className="ml-auto text-slate-500 font-mono">{progress}%</span>
                   </div>
                   <div className="w-full h-2 bg-bg-soft rounded-full overflow-hidden">
                     <div
-                      className={`h-full transition-all duration-500 ${
-                        state.status === 'error' ? 'bg-red-500' :
-                        state.status === 'success' ? 'bg-emerald-500' : 'bg-brand'
+                      className={`h-full transition-all duration-700 ${
+                        s.status === 'error' ? 'bg-red-500' :
+                        s.status === 'success' ? 'bg-emerald-500' : 'bg-brand'
                       }`}
                       style={{ width: `${progress}%` }}
                     />
                   </div>
-                  {state.status === 'success' && (
-                    <p className="text-xs text-emerald-400">Refresh the page to load the new version.</p>
+                  {s.status === 'success' && (
+                    <p className="text-xs text-emerald-400 flex items-center gap-1">
+                      <Loader2 size={12} className="animate-spin"/> Reloading the page to load the new version…
+                    </p>
+                  )}
+                  {isRunning && (
+                    <p className="text-xs text-slate-500">You'll stay logged in. The page will reload automatically when finished.</p>
                   )}
                 </div>
               )}
 
-              {updateMsg && <div className="text-sm rounded-lg p-2 bg-red-500/10 text-red-400">{updateMsg}</div>}
+              {requestErr && <div className="text-sm rounded-lg p-2 bg-red-500/10 text-red-400">{requestErr}</div>}
 
               <div className="flex gap-2 justify-end">
                 <button className="btn-secondary" onClick={checkUpdates} disabled={checking || updating}>
@@ -168,7 +146,7 @@ export default function Settings() {
                   {updating ? 'Updating…' : 'Update now'}
                 </button>
               </div>
-              <p className="text-xs text-slate-500">Pulls the latest code from GitHub and rebuilds the containers. The portal will be unavailable for 1–2 minutes.</p>
+              <p className="text-xs text-slate-500">Pulls the latest code from GitHub and rebuilds the containers. Takes ~1–2 minutes.</p>
             </div>
           ) : <div className="text-slate-500 text-sm">Loading…</div>}
         </div>
@@ -177,14 +155,14 @@ export default function Settings() {
       {user?.role === 'ADMIN' && (
         <div className="card p-5">
           <h2 className="font-medium mb-3 flex items-center gap-2"><Download size={16}/>Backup / export</h2>
-          <p className="text-sm text-slate-400 mb-3">Export users, clients and permissions as a JSON file. API tokens are included — store securely.</p>
+          <p className="text-sm text-slate-400 mb-3">Export users, clients and permissions as a JSON file.</p>
           <button className="btn-secondary" onClick={exportData}><Download size={14}/>Download export</button>
         </div>
       )}
 
       <div className="card p-5 text-sm text-slate-400">
         <div className="text-slate-300 font-medium mb-2">About</div>
-        <div>HA-Hub v{updateInfo?.local?.version || '1.3.0'}</div>
+        <div>HA-Hub v{info?.local?.version || '1.4.0'}</div>
         <div>Logged in as <span className="text-slate-200">{user?.username}</span> ({user?.role})</div>
         <a className="text-brand hover:underline" href="/api/docs" target="_blank" rel="noreferrer">API documentation →</a>
       </div>

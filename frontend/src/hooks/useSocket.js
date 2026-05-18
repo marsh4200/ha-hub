@@ -6,11 +6,21 @@ export function useSocket(onEvent) {
   useEffect(() => {
     const token = localStorage.getItem('ha-hub-token');
     if (!token) return;
-    const s = io({ auth: { token }, transports: ['websocket', 'polling'] });
+
+    const s = io({
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    });
     ref.current = s;
+
     if (onEvent) {
       s.on('client:update', (p) => onEvent('client:update', p));
       s.on('notification', (p) => onEvent('notification', p));
+      s.on('reconnect', () => onEvent('reconnect', null));
     }
     return () => s.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
