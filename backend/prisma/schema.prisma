@@ -1,0 +1,109 @@
+// HA-Hub database schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum ClientStatus {
+  ONLINE
+  OFFLINE
+  UNKNOWN
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+  AUDIT
+}
+
+model User {
+  id          String       @id @default(cuid())
+  username    String       @unique
+  email       String?      @unique
+  passwordHash String
+  role        Role         @default(USER)
+  active      Boolean      @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  sessions    Session[]
+  permissions Permission[]
+  logs        Log[]
+}
+
+model Client {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique          // used in URLs / cards
+  url         String                        // e.g. https://client1.mydomain.com
+  haVersion   String?
+  hostname    String?
+  uptime      BigInt?
+  status      ClientStatus @default(UNKNOWN)
+  lastSeenAt  DateTime?
+  notes       String?
+  apiToken    String       @unique          // sent by the HA agent
+  group       String?                       // optional grouping
+  tags        String[]     @default([])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  permissions Permission[]
+}
+
+model Permission {
+  id        String   @id @default(cuid())
+  userId    String
+  clientId  String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique             // hashed refresh/JWT id
+  userAgent  String?
+  ip         String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  revokedAt  DateTime?
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Log {
+  id        String   @id @default(cuid())
+  level     LogLevel @default(INFO)
+  category  String                       // auth | client | user | system
+  message   String
+  meta      Json?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([category])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}

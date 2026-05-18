@@ -1,0 +1,17 @@
+[Unit]
+Description=HA-Hub heartbeat agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=HAHUB_URL=https://hub.mydomain.com
+Environment=HAHUB_TOKEN=REPLACE_ME
+Environment=HAHUB_INTERVAL=30
+ExecStart=/usr/bin/python3 /opt/ha-hub-agent/ha_hub_agent.py
+Restart=always
+RestartSec=10
+User=nobody
+
+[Install]
+WantedBy=multi-user.target

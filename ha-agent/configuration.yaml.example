@@ -1,0 +1,15 @@
+# Option A — run as a command_line sensor inside HA itself (no separate service)
+# Add to your configuration.yaml:
+
+command_line:
+  - sensor:
+      name: HA-Hub heartbeat
+      command: >
+        HAHUB_URL=https://hub.mydomain.com
+        HAHUB_TOKEN=REPLACE_WITH_YOUR_TOKEN
+        python3 /config/ha_hub_agent.py --once 2>&1 || echo error
+      scan_interval: 30
+      command_timeout: 15
+
+# Option B — run as a systemd service on the host (recommended for HA OS / Supervised users
+# who don't want to embed scripts in /config). See ha-hub-agent.service in this folder.

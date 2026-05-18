@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+
+@layer components {
+  .btn { @apply inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition; }
+  .btn-primary { @apply btn bg-brand hover:bg-brand-dark text-white; }
+  .btn-secondary { @apply btn bg-bg-card hover:bg-line border border-line text-slate-200; }
+  .btn-danger { @apply btn bg-red-600 hover:bg-red-700 text-white; }
+  .card { @apply bg-bg-card border border-line rounded-xl; }
+  .input {
+    @apply w-full bg-bg-soft border border-line rounded-lg px-3 py-2 text-sm
+           focus:outline-none focus:ring-2 focus:ring-brand;
+  }
+  .label { @apply block text-xs font-medium text-slate-400 mb-1; }
+  .badge { @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium; }
+  .badge-online { @apply badge bg-emerald-500/15 text-emerald-400; }
+  .badge-offline { @apply badge bg-red-500/15 text-red-400; }
+  .badge-unknown { @apply badge bg-slate-500/15 text-slate-400; }
+}
+
+.dot { width: 8px; height: 8px; border-radius: 9999px; display: inline-block; }
+.dot-online { background: #10b981; box-shadow: 0 0 0 4px rgba(16,185,129,0.15); }
+.dot-offline { background: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,0.15); }
+.dot-unknown { background: #94a3b8; box-shadow: 0 0 0 4px rgba(148,163,184,0.15); }
