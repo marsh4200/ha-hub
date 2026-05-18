@@ -5,7 +5,7 @@
 set -Eeuo pipefail
 
 # ====== Config (override via env) ======
-REPO_URL="${HAHUB_REPO:-https://github.com/YOUR_USER/ha-hub.git}"
+REPO_URL="${HAHUB_REPO:-https://github.com/marsh4200/ha-hub.git}"
 BRANCH="${HAHUB_BRANCH:-main}"
 INSTALL_DIR="${HAHUB_DIR:-/opt/ha-hub}"
 DEPLOY_MODE="${HAHUB_MODE:-}"             # docker | native | (prompt)
