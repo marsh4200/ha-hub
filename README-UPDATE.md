@@ -1,66 +1,31 @@
 # HA-Hub v1.1.0 update bundle
 
-Drop these files into your `ha-hub` repo on GitHub (the folders match exactly).
+## How to deploy in ONE command
 
-## What's in this bundle
+### Step 1 — Upload these files to GitHub (one time)
 
-| File | New / Changed |
-| --- | --- |
-| `backend/src/services/urlPoller.js` | **NEW** — polls every client URL every 30s for online/offline |
-| `backend/src/services/updater.js` | **NEW** — backend support for the in-portal update button |
-| `backend/src/server.js` | **CHANGED** — wires in the URL poller |
-| `backend/src/routes/system.routes.js` | **CHANGED** — adds `/api/system/update*` endpoints |
-| `frontend/src/pages/Clients.jsx` | **CHANGED** — token now optional, hidden behind "Advanced" |
-| `frontend/src/pages/Settings.jsx` | **CHANGED** — new "Updates" card with check/update buttons |
-| `docker-compose.yml` | **CHANGED** — adds the shared `update-flag` volume |
-| `scripts/update-watcher.sh` | **NEW** — host-side watcher for the update button |
-| `scripts/ha-hub-update-watcher.service` | **NEW** — systemd unit for the watcher |
-| `VERSION` | **CHANGED** — bumped to 1.1.0 |
+Drag & drop the contents of this zip into https://github.com/marsh4200/ha-hub so the folder structure matches. GitHub will overwrite changed files and add the new ones.
 
-## How to deploy (one-time setup for the update button)
+The most important new file is `apply-update.sh` at the repo root — that's what the one-liner will fetch.
 
-### Step 1 — Upload the files to GitHub
-
-Easiest way: drag-and-drop.
-
-1. Go to https://github.com/marsh4200/ha-hub
-2. For each folder in this zip:
-   - Navigate to the matching folder on GitHub
-   - Click **Add file → Upload files**
-   - Drag the file(s) from the zip
-   - Commit (will overwrite existing files of the same name)
-
-Or, if you prefer the terminal on your computer:
+### Step 2 — On your server, run this single command
 
 ```bash
-# Unzip into your local clone of the repo
-unzip ha-hub-v1.1.0-update.zip -d /tmp/update
-cp -r /tmp/update/* /path/to/your/local/ha-hub/
-cd /path/to/your/local/ha-hub
-git add .
-git commit -m "v1.1.0: URL polling + in-portal updates"
-git push
+curl -sSL https://raw.githubusercontent.com/marsh4200/ha-hub/main/apply-update.sh | sudo bash
 ```
 
-### Step 2 — On your server (only required once)
+It does everything:
+- Pulls the latest code
+- Installs the in-portal update watcher (only the first time)
+- Rebuilds and restarts the containers
+- Waits for health
+- Prints the URL
 
-```bash
-cd /opt/ha-hub
-sudo git pull
-sudo chmod +x scripts/update-watcher.sh
+### Step 3 — From now on
 
-# Install the watcher as a systemd service so the "Update now" button works
-sudo cp scripts/ha-hub-update-watcher.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now ha-hub-update-watcher
+Future updates can be done either way:
 
-# Rebuild
-sudo docker compose down
-sudo docker compose --env-file .env up -d --build
-```
+**Easy:** Open the portal → Settings → Updates → click **Update now** ✨
 
-Wait ~2 minutes, refresh the portal.
+**Or rerun the one-liner** any time, on any version, and it'll bring you up to date.
 
-### From now on
-
-Push commits to GitHub → click **Settings → Updates → Update now** in the portal. 🎉
