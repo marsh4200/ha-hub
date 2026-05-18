@@ -31,7 +31,14 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
       HEARTBEAT_TIMEOUT_SECONDS: ${HEARTBEAT_TIMEOUT_SECONDS:-90}
+      URL_POLL_INTERVAL_SECONDS: ${URL_POLL_INTERVAL_SECONDS:-30}
+      URL_POLL_TIMEOUT_SECONDS: ${URL_POLL_TIMEOUT_SECONDS:-10}
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      UPDATE_REPO: ${UPDATE_REPO:-https://github.com/marsh4200/ha-hub.git}
+      UPDATE_BRANCH: ${UPDATE_BRANCH:-main}
+    volumes:
+      - update-flag:/app
 
 volumes:
   ha-hub-db:
+  update-flag:

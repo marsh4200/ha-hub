@@ -1,0 +1,15 @@
+[Unit]
+Description=HA-Hub in-portal update watcher
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/opt/ha-hub/scripts/update-watcher.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/ha-hub-update.log
+StandardError=append:/var/log/ha-hub-update.log
+
+[Install]
+WantedBy=multi-user.target
