@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
-import { Download, KeyRound, RefreshCw, GitBranch, CheckCircle2, AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import { Download, KeyRound, RefreshCw, GitBranch, CheckCircle2, AlertCircle, Loader2, Sparkles, ArrowRight } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useUpdate } from '../context/UpdateContext.jsx';
 
-const JUST_UPDATED_KEY = 'ha-hub-just-updated';
+const VERSION_BEFORE_KEY = 'ha-hub-version-before-update';
+const JUST_UPDATED_KEY   = 'ha-hub-just-updated';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -17,50 +18,51 @@ export default function Settings() {
   const [checking, setChecking] = useState(false);
   const [requestErr, setRequestErr] = useState('');
   const [upToDateMsg, setUpToDateMsg] = useState('');
-  const [justUpdated, setJustUpdated] = useState(null);
+  const [justUpdated, setJustUpdated] = useState(null); // { from, to }
   const fadeTimer = useRef(null);
-
-  // Show "Update complete" banner after page reload from successful update
-  useEffect(() => {
-    const stored = localStorage.getItem(JUST_UPDATED_KEY);
-    if (stored) {
-      try {
-        const payload = JSON.parse(stored);
-        // Only show if it was within the last 30 seconds
-        if (Date.now() - payload.at < 30_000) {
-          setJustUpdated(payload);
-          // Fade after 5 seconds
-          fadeTimer.current = setTimeout(() => {
-            setJustUpdated(null);
-            localStorage.removeItem(JUST_UPDATED_KEY);
-          }, 5_000);
-        } else {
-          localStorage.removeItem(JUST_UPDATED_KEY);
-        }
-      } catch (_) {
-        localStorage.removeItem(JUST_UPDATED_KEY);
-      }
-    }
-    return () => fadeTimer.current && clearTimeout(fadeTimer.current);
-  }, []);
 
   async function loadInfo() {
     try {
       const { data } = await api.get('/system/update/status');
       setInfo(prev => ({ ...(prev || {}), local: data.local, repo: data.repo, remote: prev?.remote || null }));
-    } catch (_) {}
+      return data.local?.version || null;
+    } catch (_) { return null; }
   }
   useEffect(() => { if (user?.role === 'ADMIN') loadInfo(); /* eslint-disable-next-line */ }, [user]);
 
-  // Watch for transition from running → success: stash version into localStorage so it survives the reload
+  // On mount: check if we just came back from an update reload
   useEffect(() => {
-    if (updateState?.status === 'success' && info?.local?.version) {
-      localStorage.setItem(JUST_UPDATED_KEY, JSON.stringify({
-        version: info.local.version,
-        at: Date.now(),
-      }));
+    const beforeRaw = localStorage.getItem(VERSION_BEFORE_KEY);
+    if (!beforeRaw) return;
+
+    let before;
+    try { before = JSON.parse(beforeRaw); } catch { localStorage.removeItem(VERSION_BEFORE_KEY); return; }
+
+    // If the stash is stale (>10 min old), drop it — must've been an aborted update
+    if (Date.now() - before.at > 10 * 60 * 1000) {
+      localStorage.removeItem(VERSION_BEFORE_KEY);
+      return;
     }
-  }, [updateState?.status, info?.local?.version]);
+
+    // Fetch the current (post-reload) version and compare
+    (async () => {
+      const currentVersion = await loadInfo();
+      if (!currentVersion) return;
+
+      if (currentVersion !== before.version) {
+        // Real update happened — show banner
+        setJustUpdated({ from: before.version, to: currentVersion });
+        fadeTimer.current = setTimeout(() => {
+          setJustUpdated(null);
+        }, 5_000);
+      }
+      // Either way — clear the stash so it doesn't fire again on next visit
+      localStorage.removeItem(VERSION_BEFORE_KEY);
+    })();
+
+    return () => fadeTimer.current && clearTimeout(fadeTimer.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function checkUpdates() {
     setChecking(true); setRequestErr(''); setUpToDateMsg('');
@@ -89,13 +91,22 @@ export default function Settings() {
   async function runUpdate() {
     if (!confirm('Update HA-Hub from GitHub now?\n\nYou will stay logged in and the page will reload automatically when done.')) return;
     setRequestErr(''); setUpToDateMsg('');
+
+    // Stash the current version BEFORE starting — survives the reload
+    if (info?.local?.version) {
+      localStorage.setItem(VERSION_BEFORE_KEY, JSON.stringify({
+        version: info.local.version,
+        at: Date.now(),
+      }));
+    }
+
     setUpdating(true);
     try {
       const { data } = await api.post('/system/update');
       if (data?.upToDate) {
-        // Server says nothing to do
         setUpToDateMsg(data.message || 'Already up to date');
         setUpdating(false);
+        localStorage.removeItem(VERSION_BEFORE_KEY); // not actually updating, drop the stash
         setTimeout(() => setUpToDateMsg(''), 5_000);
         return;
       }
@@ -103,6 +114,7 @@ export default function Settings() {
     } catch (e) {
       setRequestErr(e.response?.data?.error || 'Update request failed');
       setUpdating(false);
+      localStorage.removeItem(VERSION_BEFORE_KEY); // request failed, drop the stash
     }
   }
 
@@ -126,7 +138,6 @@ export default function Settings() {
 
   const s = updateState || {};
   const isRunning = s.status === 'running' || s.status === 'requested';
-  const showProgressBar = isRunning;  // hide bar when idle
   const progress = s.progress ?? 0;
 
   return (
@@ -134,11 +145,16 @@ export default function Settings() {
       <div><h1 className="text-2xl font-semibold">Settings</h1>
         <p className="text-slate-400 text-sm">Account & system</p></div>
 
-      {/* Persistent "just updated" banner */}
+      {/* "Just updated" banner — only shows after a real version change */}
       {justUpdated && (
         <div className="rounded-lg p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-2 animate-fadein">
           <Sparkles size={16}/>
-          <span>Update complete — now running version <b>{justUpdated.version}</b></span>
+          <span className="flex items-center gap-1 flex-wrap">
+            Update complete —
+            <span className="font-mono text-slate-400">v{justUpdated.from}</span>
+            <ArrowRight size={12} className="text-slate-500"/>
+            <span className="font-mono text-emerald-300 font-semibold">v{justUpdated.to}</span>
+          </span>
         </div>
       )}
 
@@ -178,15 +194,13 @@ export default function Settings() {
                 )}
               </div>
 
-              {/* Up-to-date banner (transient) */}
               {upToDateMsg && (
                 <div className="text-sm rounded-lg p-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-2">
                   <CheckCircle2 size={14}/>{upToDateMsg}
                 </div>
               )}
 
-              {/* Progress bar — only while running */}
-              {showProgressBar && (
+              {isRunning && (
                 <div className="space-y-2 border-t border-line pt-3">
                   <div className="flex items-center gap-2 text-xs">
                     <Loader2 size={14} className="animate-spin text-brand"/>
@@ -194,16 +208,12 @@ export default function Settings() {
                     <span className="ml-auto text-slate-500 font-mono">{progress}%</span>
                   </div>
                   <div className="w-full h-2 bg-bg-soft rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-brand transition-all duration-700"
-                      style={{ width: `${progress}%` }}
-                    />
+                    <div className="h-full bg-brand transition-all duration-700" style={{ width: `${progress}%` }} />
                   </div>
                   <p className="text-xs text-slate-500">You'll stay logged in. The page will reload automatically when finished.</p>
                 </div>
               )}
 
-              {/* Error from watcher (sticky until next action) */}
               {s.status === 'error' && !isRunning && (
                 <div className="text-sm rounded-lg p-2 bg-red-500/10 border border-red-500/30 text-red-400 flex items-center gap-2">
                   <AlertCircle size={14}/>{s.message || 'Update failed'}
@@ -237,7 +247,7 @@ export default function Settings() {
 
       <div className="card p-5 text-sm text-slate-400">
         <div className="text-slate-300 font-medium mb-2">About</div>
-        <div>HA-Hub v{info?.local?.version || '1.5.0'}</div>
+        <div>HA-Hub v{info?.local?.version || '1.7.0'}</div>
         <div>Logged in as <span className="text-slate-200">{user?.username}</span> ({user?.role})</div>
         <a className="text-brand hover:underline" href="/api/docs" target="_blank" rel="noreferrer">API documentation →</a>
       </div>
