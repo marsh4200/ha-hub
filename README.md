@@ -22,6 +22,10 @@ A self-hosted central dashboard for managing multiple remote Home Assistant inst
 ```bash
 bash <(curl -sSL https://raw.githubusercontent.com/marsh4200/ha-hub/main/install.sh)
 ```
+## Update existing install
+```bash
+bashcurl -sSL https://raw.githubusercontent.com/marsh4200/ha-hub/main/apply-update.sh | sudo bash
+```
 
 After install, open `http://YOUR_SERVER:8080` to create the first admin.
 
