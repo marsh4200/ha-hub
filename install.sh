@@ -5,9 +5,8 @@ set -Eeuo pipefail
 REPO_URL="${HAHUB_REPO:-https://github.com/marsh4200/ha-hub.git}"
 BRANCH="${HAHUB_BRANCH:-main}"
 INSTALL_DIR="${HAHUB_DIR:-/opt/ha-hub}"
-DEPLOY_MODE="${HAHUB_MODE:-}"
 PORT="${HAHUB_PORT:-8080}"
-NONINTERACTIVE="${HAHUB_NONINTERACTIVE:-0}"
+ENV_FILE="$INSTALL_DIR/.env"
 
 C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'
 C_BLUE=$'\033[34m'; C_BOLD=$'\033[1m'; C_OFF=$'\033[0m'
@@ -17,17 +16,6 @@ ok()    { echo "${C_GREEN}✓${C_OFF} $*"; }
 warn()  { echo "${C_YELLOW}!${C_OFF} $*"; }
 err()   { echo "${C_RED}✗${C_OFF} $*" >&2; }
 step()  { echo; echo "${C_BOLD}${C_BLUE}── $* ──${C_OFF}"; }
-
-ROLLBACK_CMDS=()
-add_rollback() { ROLLBACK_CMDS+=("$1"); }
-run_rollback() {
-  warn "Installation failed — rolling back…"
-  for ((i=${#ROLLBACK_CMDS[@]}-1; i>=0; i--)); do
-    eval "${ROLLBACK_CMDS[i]}" || true
-  done
-  err "Rollback complete."
-}
-trap 'run_rollback' ERR
 
 banner() {
 cat <<'EOF'
@@ -41,39 +29,20 @@ EOF
 }
 
 require_root() {
-  if [[ $EUID -ne 0 ]]; then err "Please run as root (use: sudo bash …)"; exit 1; fi
+  if [[ $EUID -ne 0 ]]; then err "Run with sudo."; exit 1; fi
 }
 
 detect_ubuntu() {
-  if [[ ! -f /etc/os-release ]]; then err "Unsupported OS"; exit 1; fi
+  [[ -f /etc/os-release ]] || { err "Unsupported OS"; exit 1; }
   . /etc/os-release
   if [[ "${ID:-}" != "ubuntu" ]]; then
-    warn "Tuned for Ubuntu (${ID:-unknown} detected). Continuing."
+    warn "Tuned for Ubuntu — detected ${ID:-unknown}. Continuing."
   fi
   local major="${VERSION_ID%%.*}"
   if [[ -n "${VERSION_ID:-}" && "$major" -lt 22 ]]; then
     err "Ubuntu 22.04 or newer required (found $VERSION_ID)."; exit 1
   fi
   ok "OS: ${PRETTY_NAME:-$ID $VERSION_ID}"
-}
-
-ask_mode() {
-  if [[ -n "$DEPLOY_MODE" ]]; then return; fi
-  if [[ "$NONINTERACTIVE" == "1" ]] || [[ ! -t 0 ]]; then
-    info "Defaulting to Docker mode"
-    DEPLOY_MODE="docker"
-    return
-  fi
-  echo
-  echo "Choose deployment mode:"
-  echo "  1) Docker Compose  (recommended)"
-  echo "  2) Native"
-  read -rp "Selection [1]: " sel
-  case "${sel:-1}" in
-    1) DEPLOY_MODE="docker" ;;
-    2) DEPLOY_MODE="native" ;;
-    *) err "Invalid choice"; exit 1 ;;
-  esac
 }
 
 apt_refresh() {
@@ -101,7 +70,8 @@ ensure_docker() {
 
   rm -f /etc/apt/sources.list.d/docker.list /etc/apt/keyrings/docker.gpg
   install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
   chmod a+r /etc/apt/keyrings/docker.gpg
 
   local codename arch
@@ -121,25 +91,35 @@ ensure_docker() {
 clone_repo() {
   step "Fetching HA-Hub source"
   if [[ -d "$INSTALL_DIR/.git" ]]; then
+    info "Existing checkout found — updating"
     git -C "$INSTALL_DIR" fetch --all --quiet
     git -C "$INSTALL_DIR" checkout "$BRANCH" --quiet
     git -C "$INSTALL_DIR" reset --hard "origin/$BRANCH" --quiet
+    ok "Source updated to $(git -C "$INSTALL_DIR" rev-parse --short HEAD)"
   else
     mkdir -p "$(dirname "$INSTALL_DIR")"
     git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR" --quiet
-    add_rollback "rm -rf '$INSTALL_DIR'"
+    ok "Source cloned"
   fi
-  ok "Source ready at $INSTALL_DIR"
 }
 
-write_env_docker() {
-  step "Writing .env"
-  local JWT DBPASS
+write_env() {
+  step "Configuring .env"
+  if [[ -f "$ENV_FILE" ]]; then
+    info "Existing .env detected — keeping it"
+    chmod 644 "$ENV_FILE"
+    ok ".env preserved"
+    return
+  fi
+
+  local IP JWT DBPASS
+  IP="$(hostname -I | awk '{print $1}')"
   JWT="$(openssl rand -hex 64)"
   DBPASS="$(openssl rand -hex 16)"
-  cat > "$INSTALL_DIR/.env" <<EOF
+
+  cat > "$ENV_FILE" <<EOF
 PORT=$PORT
-PUBLIC_URL=http://$(hostname -I | awk '{print $1}'):$PORT
+PUBLIC_URL=http://${IP}:${PORT}
 POSTGRES_USER=hahub
 POSTGRES_PASSWORD=$DBPASS
 POSTGRES_DB=hahub
@@ -153,31 +133,40 @@ CORS_ORIGIN=*
 UPDATE_REPO=$REPO_URL
 UPDATE_BRANCH=$BRANCH
 EOF
-  chmod 600 "$INSTALL_DIR/.env"
-  ok ".env generated"
-}
+  chmod 644 "$ENV_FILE"
 
-start_docker() {
-  step "Building and starting containers"
-  cd "$INSTALL_DIR"
-  docker compose --env-file .env up -d --build
-  add_rollback "cd '$INSTALL_DIR' && docker compose down -v || true"
-  ok "Containers running"
+  if [[ ! -s "$ENV_FILE" ]]; then
+    err ".env was not written — aborting"; exit 1
+  fi
+  ok ".env generated with random secrets"
 }
 
 install_update_watcher() {
-  if [[ -f "$INSTALL_DIR/scripts/ha-hub-update-watcher.service" && -f "$INSTALL_DIR/scripts/update-watcher.sh" ]]; then
-    step "Installing update watcher"
-    chmod +x "$INSTALL_DIR/scripts/update-watcher.sh"
-    cp "$INSTALL_DIR/scripts/ha-hub-update-watcher.service" /etc/systemd/system/
-    systemctl daemon-reload
-    systemctl enable --now ha-hub-update-watcher >/dev/null 2>&1 || systemctl restart ha-hub-update-watcher
-    ok "Update watcher running"
+  if [[ ! -f "$INSTALL_DIR/scripts/update-watcher.sh" ]]; then
+    warn "Watcher script not in repo — in-portal Update button won't work"
+    return
   fi
+  step "Installing in-portal update watcher"
+  chmod +x "$INSTALL_DIR/scripts/update-watcher.sh"
+  cp "$INSTALL_DIR/scripts/ha-hub-update-watcher.service" /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable --now ha-hub-update-watcher 2>/dev/null || systemctl restart ha-hub-update-watcher
+  ok "Update watcher running"
+}
+
+start_docker() {
+  step "Building image (this can take 2-3 min on first run)"
+  cd "$INSTALL_DIR"
+  docker compose build app
+  ok "Image built"
+
+  step "Starting containers"
+  docker compose up -d --force-recreate
+  ok "Containers up"
 }
 
 configure_firewall() {
-  if ! command -v ufw >/dev/null 2>&1; then return; fi
+  command -v ufw >/dev/null 2>&1 || return
   step "Configuring UFW"
   ufw allow OpenSSH >/dev/null 2>&1 || true
   ufw allow "$PORT"/tcp >/dev/null 2>&1 || true
@@ -188,43 +177,87 @@ configure_firewall() {
 }
 
 wait_healthy() {
-  step "Waiting for HA-Hub to become ready"
+  step "Waiting for HA-Hub to become ready (up to 3 minutes)"
   local url="http://localhost:$PORT/api/health"
-  for i in $(seq 1 90); do
-    if curl -fsS "$url" >/dev/null 2>&1; then ok "API healthy"; return 0; fi
+
+  for i in $(seq 1 60); do
+    local status
+    status="$(docker inspect -f '{{.State.Status}}' ha-hub-app-1 2>/dev/null || echo missing)"
+    if [[ "$status" == "running" ]]; then break; fi
     sleep 2
   done
-  warn "API didn't respond on $url within 3 min — check logs"
+
+  for i in $(seq 1 90); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      ok "API healthy"
+      return 0
+    fi
+    sleep 2
+  done
+
+  warn "API didn't respond within 3 minutes"
+  warn "Check logs: cd $INSTALL_DIR && docker compose logs --tail 50 app"
   return 1
+}
+
+verify_install() {
+  step "Verifying installation"
+  local app_status db_status mount v
+
+  app_status="$(docker inspect -f '{{.State.Status}}' ha-hub-app-1 2>/dev/null || echo missing)"
+  db_status="$(docker inspect -f '{{.State.Status}}' ha-hub-db-1 2>/dev/null || echo missing)"
+
+  [[ "$app_status" == "running" ]] && ok "App container: running ✓" || err "App container: $app_status"
+  [[ "$db_status"  == "running" ]] && ok "DB container: running ✓"  || err "DB container: $db_status"
+
+  mount="$(docker inspect ha-hub-app-1 --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Destination}} {{end}}{{end}}' 2>/dev/null || echo unknown)"
+  if echo "$mount" | grep -q "/app/data"; then
+    ok "Volume mount: /app/data ✓"
+  else
+    warn "Volume mount: $mount (expected /app/data)"
+  fi
+
+  v="$(docker exec ha-hub-app-1 cat /app/VERSION 2>/dev/null || echo MISSING)"
+  if [[ "$v" != "MISSING" ]]; then
+    ok "Installed version: $v ✓"
+  else
+    warn "VERSION file missing from container"
+  fi
 }
 
 finish() {
   local IP; IP="$(hostname -I | awk '{print $1}')"
   echo
-  echo "${C_GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_OFF}"
-  echo "${C_GREEN}  HA-Hub is installed!${C_OFF}"
-  echo "${C_GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_OFF}"
+  echo "${C_BOLD}${C_GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_OFF}"
+  echo "${C_BOLD}${C_GREEN}  HA-Hub installed successfully!${C_OFF}"
+  echo "${C_BOLD}${C_GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_OFF}"
   echo
-  echo "  Open: http://${IP}:${PORT}"
-  echo "  Logs: cd $INSTALL_DIR && docker compose logs -f"
-  echo "  Updates: Portal → Settings → Updates → Update now"
+  echo "  Open in browser:  ${C_BOLD}http://${IP}:${PORT}${C_OFF}"
+  echo "  You'll be prompted to create the first admin account."
   echo
-  trap - ERR
+  echo "  Install dir:      $INSTALL_DIR"
+  echo "  API docs:         http://${IP}:${PORT}/api/docs"
+  echo
+  echo "  Logs:    cd $INSTALL_DIR && docker compose logs -f"
+  echo "  Stop:    cd $INSTALL_DIR && docker compose down"
+  echo
+  echo "  ${C_BOLD}Future updates:${C_OFF} Settings → Updates → Update now"
+  echo
 }
 
 main() {
   banner
   require_root
   detect_ubuntu
-  ask_mode
   ensure_basics
   ensure_docker
   clone_repo
-  write_env_docker
-  start_docker
+  write_env
   install_update_watcher
+  start_docker
   configure_firewall
   wait_healthy || true
+  verify_install
   finish
 }
 
