@@ -37,12 +37,26 @@ router.get('/update/status', requireAuth, requireRole('ADMIN'), async (req, res)
 
 router.get('/update/check', requireAuth, requireRole('ADMIN'), async (req, res) => {
   const repo = process.env.UPDATE_REPO || 'https://github.com/marsh4200/ha-hub.git';
-  const remote = await checkRemote(repo);
-  const local = await currentCommit();
-  res.json({ local, remote, repo });
+  const result = await checkRemote(repo);
+  if (result.error) return res.json({ error: result.error, repo });
+  res.json({ ...result, repo });
 });
 
 router.post('/update', requireAuth, requireRole('ADMIN'), async (req, res) => {
+  // Refuse if already up to date (unless forced)
+  if (!req.body?.force) {
+    const repo = process.env.UPDATE_REPO || 'https://github.com/marsh4200/ha-hub.git';
+    const check = await checkRemote(repo);
+    if (check && !check.error && check.upToDate) {
+      return res.status(200).json({
+        ok: false,
+        upToDate: true,
+        version: check.localVersion,
+        message: `Already up to date with version ${check.localVersion}`,
+      });
+    }
+  }
+
   const result = requestUpdate();
   if (result.error) return res.status(400).json({ error: result.error });
   res.json({ ok: true, message: 'Update requested. The portal will restart shortly.' });

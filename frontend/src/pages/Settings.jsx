@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Download, KeyRound, RefreshCw, GitBranch, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Download, KeyRound, RefreshCw, GitBranch, CheckCircle2, AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useUpdate } from '../context/UpdateContext.jsx';
+
+const JUST_UPDATED_KEY = 'ha-hub-just-updated';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -11,35 +13,93 @@ export default function Settings() {
   const [pw, setPw] = useState({ currentPassword: '', newPassword: '', confirm: '' });
   const [msg, setMsg] = useState(''); const [err, setErr] = useState('');
 
-  const [info, setInfo] = useState(null); // { local, remote, repo }
+  const [info, setInfo] = useState(null);
   const [checking, setChecking] = useState(false);
   const [requestErr, setRequestErr] = useState('');
+  const [upToDateMsg, setUpToDateMsg] = useState('');
+  const [justUpdated, setJustUpdated] = useState(null);
+  const fadeTimer = useRef(null);
+
+  // Show "Update complete" banner after page reload from successful update
+  useEffect(() => {
+    const stored = localStorage.getItem(JUST_UPDATED_KEY);
+    if (stored) {
+      try {
+        const payload = JSON.parse(stored);
+        // Only show if it was within the last 30 seconds
+        if (Date.now() - payload.at < 30_000) {
+          setJustUpdated(payload);
+          // Fade after 5 seconds
+          fadeTimer.current = setTimeout(() => {
+            setJustUpdated(null);
+            localStorage.removeItem(JUST_UPDATED_KEY);
+          }, 5_000);
+        } else {
+          localStorage.removeItem(JUST_UPDATED_KEY);
+        }
+      } catch (_) {
+        localStorage.removeItem(JUST_UPDATED_KEY);
+      }
+    }
+    return () => fadeTimer.current && clearTimeout(fadeTimer.current);
+  }, []);
 
   async function loadInfo() {
     try {
       const { data } = await api.get('/system/update/status');
-      setInfo({ local: data.local, repo: data.repo, remote: info?.remote || null });
+      setInfo(prev => ({ ...(prev || {}), local: data.local, repo: data.repo, remote: prev?.remote || null }));
     } catch (_) {}
   }
   useEffect(() => { if (user?.role === 'ADMIN') loadInfo(); /* eslint-disable-next-line */ }, [user]);
 
+  // Watch for transition from running → success: stash version into localStorage so it survives the reload
+  useEffect(() => {
+    if (updateState?.status === 'success' && info?.local?.version) {
+      localStorage.setItem(JUST_UPDATED_KEY, JSON.stringify({
+        version: info.local.version,
+        at: Date.now(),
+      }));
+    }
+  }, [updateState?.status, info?.local?.version]);
+
   async function checkUpdates() {
-    setChecking(true); setRequestErr('');
+    setChecking(true); setRequestErr(''); setUpToDateMsg('');
     try {
       const { data } = await api.get('/system/update/check');
-      setInfo(prev => ({ ...(prev||{}), local: data.local, remote: data.remote, repo: data.repo }));
+      if (data.error) {
+        setRequestErr(data.error);
+      } else {
+        setInfo(prev => ({
+          ...(prev || {}),
+          local: { version: data.localVersion },
+          remote: { version: data.remoteVersion, sha: data.commit?.sha, message: data.commit?.message },
+          repo: data.repo,
+          upToDate: data.upToDate,
+        }));
+        if (data.upToDate) {
+          setUpToDateMsg(`Already up to date — version ${data.localVersion}`);
+          setTimeout(() => setUpToDateMsg(''), 5_000);
+        }
+      }
     } catch (e) {
       setRequestErr(e.response?.data?.error || 'Check failed');
     } finally { setChecking(false); }
   }
 
   async function runUpdate() {
-    if (!confirm('Update HA-Hub from GitHub now?\n\nThe portal will briefly disconnect while it rebuilds. You will stay logged in and the page will reload automatically when done.')) return;
-    setRequestErr('');
-    setUpdating(true);            // tell api.js: don't kick out on 401/network
+    if (!confirm('Update HA-Hub from GitHub now?\n\nYou will stay logged in and the page will reload automatically when done.')) return;
+    setRequestErr(''); setUpToDateMsg('');
+    setUpdating(true);
     try {
-      await api.post('/system/update');
-      await refreshUpdate();      // immediately pull the state file
+      const { data } = await api.post('/system/update');
+      if (data?.upToDate) {
+        // Server says nothing to do
+        setUpToDateMsg(data.message || 'Already up to date');
+        setUpdating(false);
+        setTimeout(() => setUpToDateMsg(''), 5_000);
+        return;
+      }
+      await refreshUpdate();
     } catch (e) {
       setRequestErr(e.response?.data?.error || 'Update request failed');
       setUpdating(false);
@@ -66,12 +126,21 @@ export default function Settings() {
 
   const s = updateState || {};
   const isRunning = s.status === 'running' || s.status === 'requested';
+  const showProgressBar = isRunning;  // hide bar when idle
   const progress = s.progress ?? 0;
 
   return (
     <div className="space-y-6 max-w-2xl">
       <div><h1 className="text-2xl font-semibold">Settings</h1>
         <p className="text-slate-400 text-sm">Account & system</p></div>
+
+      {/* Persistent "just updated" banner */}
+      {justUpdated && (
+        <div className="rounded-lg p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-2 animate-fadein">
+          <Sparkles size={16}/>
+          <span>Update complete — now running version <b>{justUpdated.version}</b></span>
+        </div>
+      )}
 
       <div className="card p-5">
         <h2 className="font-medium mb-3 flex items-center gap-2"><KeyRound size={16}/>Change password</h2>
@@ -95,43 +164,49 @@ export default function Settings() {
               <div className="text-sm space-y-1">
                 <div className="flex justify-between"><span className="text-slate-400">Installed version</span><span className="font-mono text-slate-200">{info.local?.version || 'unknown'}</span></div>
                 <div className="flex justify-between"><span className="text-slate-400">Repository</span><a className="text-brand hover:underline text-xs truncate max-w-xs" href={info.repo?.replace('.git','')} target="_blank" rel="noreferrer">{info.repo}</a></div>
-                {info.remote && !info.remote.error && (
-                  <>
-                    <div className="flex justify-between"><span className="text-slate-400">Latest commit</span><span className="font-mono text-slate-200">{info.remote.sha}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">Message</span><span className="text-slate-300 text-xs truncate max-w-xs">{info.remote.message}</span></div>
-                  </>
+                {info.remote?.version && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Latest version</span>
+                    <span className="font-mono text-slate-200">
+                      {info.remote.version}
+                      {info.upToDate && <span className="ml-2 text-emerald-400 text-xs">✓ up to date</span>}
+                    </span>
+                  </div>
                 )}
-                {info.remote?.error && (
-                  <div className="text-amber-400 text-xs flex items-center gap-1 mt-2"><AlertCircle size={12}/>{info.remote.error}</div>
+                {info.remote?.sha && (
+                  <div className="flex justify-between"><span className="text-slate-400">Latest commit</span><span className="font-mono text-slate-200">{info.remote.sha}</span></div>
                 )}
               </div>
 
-              {(isRunning || s.status === 'success' || s.status === 'error') && (
+              {/* Up-to-date banner (transient) */}
+              {upToDateMsg && (
+                <div className="text-sm rounded-lg p-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-2">
+                  <CheckCircle2 size={14}/>{upToDateMsg}
+                </div>
+              )}
+
+              {/* Progress bar — only while running */}
+              {showProgressBar && (
                 <div className="space-y-2 border-t border-line pt-3">
                   <div className="flex items-center gap-2 text-xs">
-                    {isRunning && <Loader2 size={14} className="animate-spin text-brand"/>}
-                    {s.status === 'success' && <CheckCircle2 size={14} className="text-emerald-400"/>}
-                    {s.status === 'error' && <AlertCircle size={14} className="text-red-400"/>}
+                    <Loader2 size={14} className="animate-spin text-brand"/>
                     <span className="text-slate-300">{s.message || s.step || s.status}</span>
                     <span className="ml-auto text-slate-500 font-mono">{progress}%</span>
                   </div>
                   <div className="w-full h-2 bg-bg-soft rounded-full overflow-hidden">
                     <div
-                      className={`h-full transition-all duration-700 ${
-                        s.status === 'error' ? 'bg-red-500' :
-                        s.status === 'success' ? 'bg-emerald-500' : 'bg-brand'
-                      }`}
+                      className="h-full bg-brand transition-all duration-700"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
-                  {s.status === 'success' && (
-                    <p className="text-xs text-emerald-400 flex items-center gap-1">
-                      <Loader2 size={12} className="animate-spin"/> Reloading the page to load the new version…
-                    </p>
-                  )}
-                  {isRunning && (
-                    <p className="text-xs text-slate-500">You'll stay logged in. The page will reload automatically when finished.</p>
-                  )}
+                  <p className="text-xs text-slate-500">You'll stay logged in. The page will reload automatically when finished.</p>
+                </div>
+              )}
+
+              {/* Error from watcher (sticky until next action) */}
+              {s.status === 'error' && !isRunning && (
+                <div className="text-sm rounded-lg p-2 bg-red-500/10 border border-red-500/30 text-red-400 flex items-center gap-2">
+                  <AlertCircle size={14}/>{s.message || 'Update failed'}
                 </div>
               )}
 
@@ -162,7 +237,7 @@ export default function Settings() {
 
       <div className="card p-5 text-sm text-slate-400">
         <div className="text-slate-300 font-medium mb-2">About</div>
-        <div>HA-Hub v{info?.local?.version || '1.4.0'}</div>
+        <div>HA-Hub v{info?.local?.version || '1.5.0'}</div>
         <div>Logged in as <span className="text-slate-200">{user?.username}</span> ({user?.role})</div>
         <a className="text-brand hover:underline" href="/api/docs" target="_blank" rel="noreferrer">API documentation →</a>
       </div>
