@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { LayoutDashboard, Server, Users, ScrollText, Settings as SettingsIcon, LogOut, Menu, X, Home } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
+import IdleWarning from './IdleWarning.jsx';
 
 const item = ({ isActive }) =>
   `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${
@@ -16,6 +17,8 @@ export default function Layout() {
 
   return (
     <div className="min-h-full flex bg-bg">
+      <IdleWarning />
+
       {/* Sidebar */}
       <aside className={`fixed lg:static z-30 inset-y-0 left-0 w-64 bg-bg-soft border-r border-line p-4 flex flex-col transform transition-transform lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center gap-2 mb-6 px-2">
