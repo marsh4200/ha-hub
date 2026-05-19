@@ -24,9 +24,8 @@ bash <(curl -sSL https://raw.githubusercontent.com/marsh4200/ha-hub/main/install
 ```
 ## Update existing install
 ```bash
-bashcurl -sSL https://raw.githubusercontent.com/marsh4200/ha-hub/main/apply-update.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/marsh4200/ha-hub/main/apply-update.sh | sudo bash
 ```
-
 After install, open `http://YOUR_SERVER:8080` to create the first admin.
 
 ## Manual install / Docker / agent setup
