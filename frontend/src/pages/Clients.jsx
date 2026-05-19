@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Copy, RefreshCw, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Edit2, Trash2, Copy, RefreshCw, X, ChevronDown, ChevronUp, FileArchive } from 'lucide-react';
 import api from '../services/api';
 import StatusBadge from '../components/StatusBadge.jsx';
+import BackupCard from '../components/BackupCard.jsx';
 
 const EMPTY = { name: '', url: '', notes: '', group: '', tags: '' };
 
@@ -12,6 +13,7 @@ export default function Clients() {
   const [showModal, setShowModal] = useState(false);
   const [newToken, setNewToken] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
   const [err, setErr] = useState('');
 
   async function load() {
@@ -39,66 +41,103 @@ export default function Clients() {
     try {
       if (editing) {
         await api.patch(`/clients/${editing.id}`, payload);
-        setShowModal(false);
       } else {
         await api.post('/clients', payload);
-        // No token modal — just close. Status will populate within 30 seconds.
-        setShowModal(false);
       }
+      setShowModal(false);
       await load();
     } catch (e) { setErr(e.response?.data?.error || 'Save failed'); }
   }
 
   async function remove(c) {
-    if (!confirm(`Delete client "${c.name}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete client "${c.name}"? This also deletes any stored backup. This cannot be undone.`)) return;
     await api.delete(`/clients/${c.id}`);
     load();
   }
 
   async function showToken(c) {
-    // Show the agent token for users who want to install the optional agent
-    if (!confirm(`Rotate API token for "${c.name}"?\n\nOnly needed if you want to install the optional agent for richer status info (version, uptime). The current agent (if any) will stop working until updated.`)) return;
+    if (!confirm(`Rotate API token for "${c.name}"?\n\nOnly needed if you want to install the optional agent for richer status info.`)) return;
     const { data } = await api.post(`/clients/${c.id}/rotate-token`);
     setNewToken({ token: data.apiToken, name: c.name });
+  }
+
+  function toggleExpand(id) {
+    setExpandedId(prev => prev === id ? null : id);
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-semibold">Clients</h1>
-          <p className="text-slate-400 text-sm">Manage Home Assistant instances — status is checked automatically every 30 seconds</p></div>
+        <div>
+          <h1 className="text-2xl font-semibold">Clients</h1>
+          <p className="text-slate-400 text-sm">Manage Home Assistant instances — status checked every 30s</p>
+        </div>
         <button className="btn-primary" onClick={() => open(null)}><Plus size={16}/>Add client</button>
       </div>
 
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="text-left text-slate-400 bg-bg-soft">
-            <tr><th className="px-4 py-2.5 font-medium">Name</th><th className="font-medium">Status</th>
-              <th className="font-medium">URL</th><th className="font-medium">Version</th>
-              <th className="font-medium">Group</th><th className="px-4 font-medium text-right">Actions</th></tr>
-          </thead>
-          <tbody>
-            {clients.map(c => (
-              <tr key={c.id} className="border-t border-line">
-                <td className="px-4 py-2.5">{c.name}</td>
-                <td><StatusBadge status={c.status}/></td>
-                <td className="text-slate-400 truncate max-w-xs"><a className="hover:text-brand" href={c.url} target="_blank" rel="noreferrer">{c.url}</a></td>
-                <td className="text-slate-400">{c.haVersion || '—'}</td>
-                <td className="text-slate-400">{c.group || '—'}</td>
-                <td className="px-4 py-2 text-right">
-                  <div className="inline-flex gap-1">
-                    <button className="btn-secondary !px-2 !py-1.5" onClick={() => showToken(c)} title="Rotate agent token (optional)"><RefreshCw size={14}/></button>
-                    <button className="btn-secondary !px-2 !py-1.5" onClick={() => open(c)} title="Edit"><Edit2 size={14}/></button>
-                    <button className="btn-danger !px-2 !py-1.5" onClick={() => remove(c)} title="Delete"><Trash2 size={14}/></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {clients.length === 0 && <tr><td colSpan="6" className="text-center text-slate-500 py-10">No clients yet — add your first one.</td></tr>}
-          </tbody>
-        </table>
+      <div className="space-y-2">
+        {clients.length === 0 && (
+          <div className="card p-10 text-center text-slate-500">No clients yet — add your first one.</div>
+        )}
+
+        {clients.map(c => {
+          const expanded = expandedId === c.id;
+          return (
+            <div key={c.id} className="card overflow-hidden">
+              {/* Row */}
+              <div className="flex items-center gap-3 p-3 hover:bg-bg-soft/40">
+                <button
+                  onClick={() => toggleExpand(c.id)}
+                  className="text-slate-400 hover:text-slate-200 px-1"
+                  aria-label={expanded ? 'Collapse' : 'Expand'}
+                >
+                  {expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+                </button>
+
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium truncate">{c.name}</div>
+                  <a href={c.url} target="_blank" rel="noreferrer"
+                     className="text-xs text-slate-500 hover:text-brand truncate block">{c.url}</a>
+                </div>
+
+                <StatusBadge status={c.status}/>
+
+                <span className="hidden md:inline text-xs text-slate-400 min-w-[60px]">
+                  {c.haVersion || '—'}
+                </span>
+
+                <span className="hidden lg:inline text-xs text-slate-400 min-w-[80px]">
+                  {c.group || '—'}
+                </span>
+
+                <div className="flex gap-1">
+                  <button className="btn-secondary !px-2 !py-1.5" onClick={() => toggleExpand(c.id)} title="Backup">
+                    <FileArchive size={14}/>
+                  </button>
+                  <button className="btn-secondary !px-2 !py-1.5" onClick={() => showToken(c)} title="Rotate token"><RefreshCw size={14}/></button>
+                  <button className="btn-secondary !px-2 !py-1.5" onClick={() => open(c)} title="Edit"><Edit2 size={14}/></button>
+                  <button className="btn-danger !px-2 !py-1.5" onClick={() => remove(c)} title="Delete"><Trash2 size={14}/></button>
+                </div>
+              </div>
+
+              {/* Expanded section */}
+              {expanded && (
+                <div className="p-4 border-t border-line bg-bg-soft/30 space-y-3">
+                  {c.notes && (
+                    <div className="text-sm text-slate-300">
+                      <div className="text-xs text-slate-500 mb-1">Notes</div>
+                      <div className="whitespace-pre-wrap">{c.notes}</div>
+                    </div>
+                  )}
+                  <BackupCard client={c} isAdmin={true} onChange={load}/>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
+      {/* Add/edit modal */}
       {showModal && (
         <Modal onClose={() => setShowModal(false)} title={editing ? `Edit ${editing.name}` : 'Add client'}>
           {newToken ? (
@@ -110,32 +149,13 @@ export default function Clients() {
               <div>
                 <label className="label">Cloudflare URL</label>
                 <input className="input" required type="url" placeholder="https://client1.mydomain.com" value={form.url} onChange={e=>setForm({...form, url:e.target.value})}/>
-                <p className="text-xs text-slate-500 mt-1">Online/offline is detected by polling this URL every 30 seconds. No setup needed on the HA box.</p>
+                <p className="text-xs text-slate-500 mt-1">Online/offline is detected by polling this URL every 30s.</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label">Group</label><input className="input" value={form.group} onChange={e=>setForm({...form, group:e.target.value})}/></div>
                 <div><label className="label">Tags (comma separated)</label><input className="input" value={form.tags} onChange={e=>setForm({...form, tags:e.target.value})}/></div>
               </div>
               <div><label className="label">Notes</label><textarea className="input" rows={2} value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})}/></div>
-
-              {!editing && (
-                <div className="border-t border-line pt-3">
-                  <button type="button" onClick={() => setShowAdvanced(v => !v)} className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1">
-                    {showAdvanced ? <ChevronUp size={14}/> : <ChevronDown size={14}/>} Advanced: install optional agent
-                  </button>
-                  {showAdvanced && (
-                    <div className="mt-2 text-xs text-slate-400 bg-bg-soft border border-line rounded-lg p-3 space-y-2">
-                      <p>URL polling already shows online/offline. The agent is optional and adds:</p>
-                      <ul className="list-disc pl-4 space-y-0.5">
-                        <li>HA version (sometimes more reliable than URL polling)</li>
-                        <li>Hostname & uptime</li>
-                        <li>Detects HA process crashes even when the tunnel still responds</li>
-                      </ul>
-                      <p>After creating the client, click the <RefreshCw size={12} className="inline"/> icon next to it to generate a token, then install the agent. See <code className="text-brand">docs/AGENT.md</code> on GitHub.</p>
-                    </div>
-                  )}
-                </div>
-              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>

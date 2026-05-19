@@ -29,23 +29,32 @@ app.use(cors({
   credentials: true,
 }));
 app.use(compression());
-app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 BigInt.prototype.toJSON = function () { return Number(this); };
 
+// JSON body parser — small limit. Multipart uploads bypass this.
+app.use(express.json({ limit: '2mb' }));
+
+// Rate limiting — but exempt backup uploads/downloads (they can be slow & large)
 const apiLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
   max: parseInt(process.env.RATE_LIMIT_MAX || '300', 10),
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => /\/api\/clients\/.+\/backup/.test(req.path),
 });
 app.use('/api/', apiLimiter);
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/setup', authLimiter);
+
+// Don't time out long uploads (default 2 min is too short for 800 MB on slow links)
+server.requestTimeout = 30 * 60 * 1000;       // 30 min
+server.headersTimeout = 31 * 60 * 1000;
+server.timeout = 0;                            // no idle socket timeout
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
@@ -71,9 +80,6 @@ app.use((err, req, res, _next) => {
 });
 
 initSocket(server);
-
-// Both run in parallel — agent heartbeats override status if installed,
-// URL polling handles everyone else.
 startOfflineWatcher();
 startUrlPoller();
 

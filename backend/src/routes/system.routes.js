@@ -2,6 +2,7 @@ const router = require('express').Router();
 const prisma = require('../config/prisma');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { readState, currentCommit, checkRemote, requestUpdate } = require('../services/updater');
+const { getUsage } = require('../controllers/backup.controller');
 
 router.get('/stats', requireAuth, async (req, res) => {
   const where = req.user.role === 'ADMIN'
@@ -23,10 +24,16 @@ router.get('/export', requireAuth, requireRole('ADMIN'), async (req, res) => {
     prisma.client.findMany(),
     prisma.permission.findMany(),
   ]);
-  const sanitizedClients = clients.map(c => ({ ...c, uptime: c.uptime != null ? Number(c.uptime) : null }));
+  const sanitizedClients = clients.map(c => ({
+    ...c,
+    uptime: c.uptime != null ? Number(c.uptime) : null,
+    backupSize: c.backupSize != null ? Number(c.backupSize) : null,
+  }));
   res.setHeader('Content-Disposition', `attachment; filename=ha-hub-export-${Date.now()}.json`);
   res.json({ exportedAt: new Date(), users, clients: sanitizedClients, permissions });
 });
+
+router.get('/backup-usage', requireAuth, requireRole('ADMIN'), getUsage);
 
 router.get('/update/status', requireAuth, requireRole('ADMIN'), async (req, res) => {
   const local = await currentCommit();
@@ -43,7 +50,6 @@ router.get('/update/check', requireAuth, requireRole('ADMIN'), async (req, res) 
 });
 
 router.post('/update', requireAuth, requireRole('ADMIN'), async (req, res) => {
-  // Refuse if already up to date (unless forced)
   if (!req.body?.force) {
     const repo = process.env.UPDATE_REPO || 'https://github.com/marsh4200/ha-hub.git';
     const check = await checkRemote(repo);

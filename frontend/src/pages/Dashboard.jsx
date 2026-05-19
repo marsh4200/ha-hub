@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search, ExternalLink, Activity, CheckCircle2, XCircle, HelpCircle } from 'lucide-react';
+import { Search, ExternalLink, Activity, CheckCircle2, XCircle, HelpCircle, Download, FileArchive } from 'lucide-react';
 import api from '../services/api';
 import { useSocket } from '../hooks/useSocket';
 import { useNow } from '../hooks/useNow';
@@ -20,18 +20,16 @@ export default function Dashboard() {
   const [stats, setStats] = useState({ total: 0, online: 0, offline: 0, unknown: 0 });
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
-  const now = useNow(1000); // ticks every second → relTime updates live
+  const now = useNow(1000);
 
   async function load() {
     try {
       const [c, s] = await Promise.all([api.get('/clients'), api.get('/system/stats')]);
       setClients(c.data.clients);
       setStats(s.data);
-    } catch (_) { /* update may be in progress */ }
+    } catch (_) {}
   }
   useEffect(() => { load(); }, []);
-
-  // Light refresh every 10s as a safety net even if sockets are unhealthy
   useEffect(() => {
     const id = setInterval(load, 10_000);
     return () => clearInterval(id);
@@ -57,6 +55,24 @@ export default function Dashboard() {
              (c.tags || []).some(t => t.toLowerCase().includes(s));
     });
   }, [clients, q, filter]);
+
+  async function downloadBackup(e, client) {
+    e.preventDefault(); e.stopPropagation();
+    try {
+      const meta = await api.get(`/clients/${client.id}/backup`);
+      if (!meta.data?.backup) {
+        alert('No backup available for this client');
+        return;
+      }
+      const res = await api.get(`/clients/${client.id}/backup/download`, { responseType: 'blob', timeout: 0 });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url; a.download = meta.data.backup.filename; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Download failed');
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -94,7 +110,7 @@ export default function Dashboard() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {filtered.map(c => (
           <a key={c.id} href={c.url} target="_blank" rel="noreferrer"
-             className="card p-4 hover:border-brand/50 transition group">
+             className="card p-4 hover:border-brand/50 transition group relative">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="font-medium truncate">{c.name}</div>
@@ -111,8 +127,19 @@ export default function Dashboard() {
                 {c.tags.map(t => <span key={t} className="text-[10px] bg-bg-soft border border-line px-2 py-0.5 rounded">{t}</span>)}
               </div>
             )}
-            <div className="mt-3 text-xs text-brand flex items-center gap-1 opacity-0 group-hover:opacity-100">
-              Open <ExternalLink size={12}/>
+            <div className="mt-3 flex items-center justify-between">
+              <div className="text-xs text-brand flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                Open <ExternalLink size={12}/>
+              </div>
+              {c.backupFilename && (
+                <button
+                  onClick={(e) => downloadBackup(e, c)}
+                  className="text-xs text-slate-400 hover:text-brand flex items-center gap-1"
+                  title={`Download backup: ${c.backupFilename}`}
+                >
+                  <FileArchive size={12}/><Download size={12}/>Backup
+                </button>
+              )}
             </div>
           </a>
         ))}

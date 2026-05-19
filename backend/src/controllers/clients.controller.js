@@ -9,10 +9,13 @@ function slugify(name) {
 
 function sanitize(c) {
   if (!c) return c;
-  return { ...c, uptime: c.uptime != null ? Number(c.uptime) : null };
+  return {
+    ...c,
+    uptime: c.uptime != null ? Number(c.uptime) : null,
+    backupSize: c.backupSize != null ? Number(c.backupSize) : null,
+  };
 }
 
-// GET /api/clients — admins see all; users see only assigned
 async function list(req, res) {
   const where =
     req.user.role === 'ADMIN'
@@ -26,18 +29,19 @@ async function list(req, res) {
       id: true, name: true, slug: true, url: true, haVersion: true, hostname: true,
       uptime: true, status: true, lastSeenAt: true, notes: true, group: true,
       tags: true, createdAt: true, updatedAt: true,
-      // apiToken intentionally omitted from list
+      backupFilename: true, backupSize: true, backupUploadedAt: true,
     },
   });
   res.json({ clients: clients.map(sanitize) });
 }
 
-// GET /api/clients/:id — admin or assigned user
 async function get(req, res) {
   const { id } = req.params;
   const client = await prisma.client.findUnique({
     where: { id },
-    include: req.user.role === 'ADMIN' ? { permissions: { include: { user: { select: { id: true, username: true } } } } } : undefined,
+    include: req.user.role === 'ADMIN'
+      ? { permissions: { include: { user: { select: { id: true, username: true } } } } }
+      : undefined,
   });
   if (!client) return res.status(404).json({ error: 'Not found' });
   if (req.user.role !== 'ADMIN') {
@@ -56,7 +60,6 @@ const createValidators = [
   body('tags').optional().isArray(),
 ];
 
-// POST /api/clients (admin only)
 async function create(req, res) {
   const { name, url, notes, group, tags } = req.body;
   let slug = slugify(name);
@@ -69,7 +72,7 @@ async function create(req, res) {
     data: { name, slug, url, notes: notes || null, group: group || null, tags: tags || [], apiToken },
   });
   await log({ category: 'client', level: 'AUDIT', message: `Client created: ${name}`, userId: req.user.id, meta: { clientId: client.id } });
-  res.status(201).json({ client: sanitize(client) }); // includes apiToken (only on create)
+  res.status(201).json({ client: sanitize(client) });
 }
 
 const updateValidators = [
@@ -95,11 +98,19 @@ async function update(req, res) {
 async function remove(req, res) {
   const { id } = req.params;
   const client = await prisma.client.delete({ where: { id } });
+  // Also clean up any backup files on disk
+  const fsp = require('fs/promises');
+  const path = require('path');
+  const backupDir = path.join(process.env.BACKUP_DIR || '/app/data/backups', id);
+  for (const f of ['backup.tar', 'backup.tar.gz']) {
+    await fsp.unlink(path.join(backupDir, f)).catch(() => {});
+  }
+  await fsp.rmdir(backupDir).catch(() => {});
+
   await log({ category: 'client', level: 'AUDIT', message: `Client deleted: ${client.name}`, userId: req.user.id, meta: { clientId: client.id } });
   res.json({ ok: true });
 }
 
-// POST /api/clients/:id/rotate-token (admin only)
 async function rotateToken(req, res) {
   const { id } = req.params;
   const apiToken = randomToken(32);

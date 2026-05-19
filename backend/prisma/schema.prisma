@@ -46,19 +46,25 @@ model User {
 model Client {
   id          String       @id @default(cuid())
   name        String
-  slug        String       @unique          // used in URLs / cards
-  url         String                        // e.g. https://client1.mydomain.com
+  slug        String       @unique
+  url         String
   haVersion   String?
   hostname    String?
   uptime      BigInt?
   status      ClientStatus @default(UNKNOWN)
   lastSeenAt  DateTime?
   notes       String?
-  apiToken    String       @unique          // sent by the HA agent
-  group       String?                       // optional grouping
+  apiToken    String       @unique
+  group       String?
   tags        String[]     @default([])
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+
+  // Backup metadata (v1.8) — one backup per client
+  backupFilename     String?
+  backupSize         BigInt?
+  backupUploadedAt   DateTime?
+  backupUploadedById String?
 
   permissions Permission[]
 }
@@ -78,7 +84,7 @@ model Permission {
 model Session {
   id         String   @id @default(cuid())
   userId     String
-  tokenHash  String   @unique             // hashed refresh/JWT id
+  tokenHash  String   @unique
   userAgent  String?
   ip         String?
   expiresAt  DateTime
@@ -91,7 +97,7 @@ model Session {
 model Log {
   id        String   @id @default(cuid())
   level     LogLevel @default(INFO)
-  category  String                       // auth | client | user | system
+  category  String
   message   String
   meta      Json?
   userId    String?
