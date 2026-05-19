@@ -20,7 +20,7 @@ A self-hosted central dashboard for managing multiple remote Home Assistant inst
 ## One-Line Install (Ubuntu 22.04+)
 
 ```bash
-bash <(curl -sSL https://raw.githubusercontent.com/marsh4200/ha-hub/main/install.sh)
+curl -sSL https://raw.githubusercontent.com/marsh4200/ha-hub/main/install.sh | sudo bash
 ```
 ## Update existing install
 ```bash
