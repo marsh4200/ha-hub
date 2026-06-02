@@ -26,6 +26,10 @@ router.get('/download', c.downloadBackup);
 router.post('/', requireRole('ADMIN'), upload.single('backup'), c.uploadBackup);
 router.delete('/', requireRole('ADMIN'), c.deleteBackup);
 
+// Emergency encryption key (text) — read via GET '/', write/delete admin only
+router.put('/key', requireRole('ADMIN'), c.setBackupKey);
+router.delete('/key', requireRole('ADMIN'), c.deleteBackupKey);
+
 // Multer error handler (file too large, etc.) — must be after the routes
 router.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {

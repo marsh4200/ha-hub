@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Upload, Download, Trash2, FileArchive, AlertTriangle, Loader2, X } from 'lucide-react';
+import { Upload, Download, Trash2, FileArchive, AlertTriangle, Loader2, X, Key, Eye, EyeOff, Save, FileText } from 'lucide-react';
 import api from '../services/api';
 
 function fmtSize(b) {
@@ -19,11 +19,21 @@ export default function BackupCard({ client, isAdmin, onChange }) {
   const [err, setErr] = useState('');
   const inputRef = useRef(null);
 
+  // Emergency encryption key (text)
+  const [keyDraft, setKeyDraft] = useState('');
+  const [keyDirty, setKeyDirty] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyErr, setKeyErr] = useState('');
+  const keyInputRef = useRef(null);
+
   async function load() {
     setLoading(true);
     try {
       const { data } = await api.get(`/clients/${client.id}/backup`);
       setInfo(data);
+      setKeyDraft(data.key?.content || '');
+      setKeyDirty(false);
     } catch (e) {
       setErr(e.response?.data?.error || 'Failed to load backup info');
     } finally { setLoading(false); }
@@ -112,6 +122,64 @@ export default function BackupCard({ client, isAdmin, onChange }) {
     }
   }
 
+  // ---- Emergency encryption key ----
+  function pickKeyFile() { keyInputRef.current?.click(); }
+
+  function onKeyFileChosen(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setKeyErr('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      setKeyDraft(String(reader.result || ''));
+      setKeyDirty(true);
+      setShowKey(true);
+    };
+    reader.onerror = () => setKeyErr('Could not read that file');
+    reader.readAsText(file);
+  }
+
+  async function saveKey() {
+    const content = keyDraft.trim();
+    if (!content) { setKeyErr('Encryption key text cannot be empty'); return; }
+    setSavingKey(true); setKeyErr('');
+    try {
+      await api.put(`/clients/${client.id}/backup/key`, { content });
+      await load();
+      onChange?.();
+    } catch (e) {
+      setKeyErr(e.response?.data?.error || 'Failed to save encryption key');
+    } finally {
+      setSavingKey(false);
+    }
+  }
+
+  async function deleteKey() {
+    if (!confirm(`Delete the emergency encryption key for "${client.name}"?`)) return;
+    setKeyErr('');
+    try {
+      await api.delete(`/clients/${client.id}/backup/key`);
+      await load();
+      onChange?.();
+    } catch (e) {
+      setKeyErr(e.response?.data?.error || 'Failed to delete encryption key');
+    }
+  }
+
+  function downloadKey() {
+    const content = info?.key?.content || keyDraft || '';
+    if (!content) return;
+    const safe = (client.slug || client.name || 'client').replace(/[^a-z0-9-_]+/gi, '-');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `emergency-encryption-key-${safe}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+
   if (loading) return <div className="card p-5 text-slate-500 text-sm">Loading backup…</div>;
 
   return (
@@ -183,6 +251,84 @@ export default function BackupCard({ client, isAdmin, onChange }) {
       <p className="text-xs text-slate-500">
         Max size {fmtSize(info?.maxSize || 800 * 1024 * 1024)} • .tar or .tar.gz only • One backup stored per client
       </p>
+
+      {/* Emergency encryption key */}
+      <div className="pt-3 mt-1 border-t border-line space-y-2">
+        <div className="flex items-center gap-2">
+          <Key size={16} className="text-brand"/>
+          <h3 className="font-medium">Emergency encryption key</h3>
+          {info?.key && <span className="ml-auto text-xs text-slate-500">stored</span>}
+        </div>
+
+        {keyErr && (
+          <div className="text-sm bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg p-2 flex items-center gap-2">
+            <AlertTriangle size={14}/>{keyErr}
+          </div>
+        )}
+
+        <div className="relative">
+          <textarea
+            value={showKey ? keyDraft : (keyDraft ? '•'.repeat(Math.min(keyDraft.length, 64)) : '')}
+            onChange={(e) => { if (showKey && isAdmin) { setKeyDraft(e.target.value); setKeyDirty(true); } }}
+            readOnly={!isAdmin || !showKey}
+            rows={3}
+            placeholder={isAdmin ? 'Paste the emergency encryption key, or upload a .txt below' : 'No encryption key stored'}
+            className="w-full text-sm font-mono bg-bg-soft border border-line rounded-lg p-2 pr-9 resize-y focus:outline-none focus:border-brand"
+          />
+          {keyDraft && (
+            <button
+              type="button"
+              onClick={() => setShowKey(s => !s)}
+              title={showKey ? 'Hide' : 'Reveal'}
+              className="absolute top-2 right-2 text-slate-400 hover:text-slate-200"
+            >
+              {showKey ? <EyeOff size={16}/> : <Eye size={16}/>}
+            </button>
+          )}
+        </div>
+
+        {info?.key && (
+          <div className="text-xs text-slate-400">
+            Updated {fmtDate(info.key.updatedAt)}
+            {info.key.updatedBy && <> by <span className="text-slate-300">{info.key.updatedBy}</span></>}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          {keyDraft && (
+            <button className="btn-secondary" onClick={downloadKey}>
+              <FileText size={14}/>Download .txt
+            </button>
+          )}
+          {isAdmin && (
+            <>
+              <button className="btn-primary" onClick={saveKey} disabled={savingKey || !keyDirty || !keyDraft.trim()}>
+                {savingKey ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}
+                {info?.key ? 'Save changes' : 'Save key'}
+              </button>
+              <button className="btn-secondary" onClick={pickKeyFile} disabled={savingKey}>
+                <Upload size={14}/>Upload .txt
+              </button>
+              {info?.key && (
+                <button className="btn-danger" onClick={deleteKey} disabled={savingKey}>
+                  <Trash2 size={14}/>Delete
+                </button>
+              )}
+              <input
+                ref={keyInputRef}
+                type="file"
+                accept=".txt,text/plain"
+                className="hidden"
+                onChange={onKeyFileChosen}
+              />
+            </>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-500">
+          Plain-text key needed to restore an encrypted backup. Stored alongside the backup — keep an offline copy too.
+        </p>
+      </div>
 
       {/* Replace confirmation modal */}
       {confirmReplace && (

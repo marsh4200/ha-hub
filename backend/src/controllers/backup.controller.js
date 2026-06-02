@@ -27,7 +27,17 @@ async function userCanAccess(user, clientId) {
   return !!p;
 }
 
-// GET /api/clients/:id/backup — metadata only
+// Resolve a userId → username (best-effort)
+async function usernameFor(userId) {
+  if (!userId) return null;
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { username: true },
+  });
+  return u?.username || null;
+}
+
+// GET /api/clients/:id/backup — metadata only (plus the encryption key text)
 async function getBackupInfo(req, res) {
   const { id } = req.params;
   const client = await prisma.client.findUnique({
@@ -36,31 +46,34 @@ async function getBackupInfo(req, res) {
       id: true, name: true,
       backupFilename: true, backupSize: true,
       backupUploadedAt: true, backupUploadedById: true,
+      backupKey: true, backupKeyUpdatedAt: true, backupKeyUpdatedById: true,
     },
   });
   if (!client) return res.status(404).json({ error: 'Client not found' });
   if (!await userCanAccess(req.user, id)) return res.status(403).json({ error: 'Forbidden' });
 
-  if (!client.backupFilename) return res.json({ backup: null });
-
-  let uploadedBy = null;
-  if (client.backupUploadedById) {
-    const u = await prisma.user.findUnique({
-      where: { id: client.backupUploadedById },
-      select: { username: true },
-    });
-    uploadedBy = u?.username || null;
-  }
-
-  res.json({
-    backup: {
+  let backup = null;
+  if (client.backupFilename) {
+    backup = {
       filename: client.backupFilename,
       size: client.backupSize != null ? Number(client.backupSize) : null,
       uploadedAt: client.backupUploadedAt,
-      uploadedBy,
-    },
-    maxSize: MAX_SIZE,
-  });
+      uploadedBy: await usernameFor(client.backupUploadedById),
+    };
+  }
+
+  // The emergency encryption key is what's needed to restore the backup, so it's
+  // visible to the same people who can access the backup (admin or assigned user).
+  let key = null;
+  if (client.backupKey != null) {
+    key = {
+      content: client.backupKey,
+      updatedAt: client.backupKeyUpdatedAt,
+      updatedBy: await usernameFor(client.backupKeyUpdatedById),
+    };
+  }
+
+  res.json({ backup, key, maxSize: MAX_SIZE });
 }
 
 // POST /api/clients/:id/backup — multipart upload (admin only, enforced by route)
@@ -209,6 +222,75 @@ async function deleteBackup(req, res) {
   res.json({ ok: true });
 }
 
+// Max length for the stored key text (an HA emergency key is short; this is a sane guard)
+const MAX_KEY_LEN = parseInt(process.env.BACKUP_KEY_MAX_CHARS || '8192', 10);
+
+// PUT /api/clients/:id/backup/key — set/replace the emergency encryption key (admin only)
+async function setBackupKey(req, res) {
+  const { id } = req.params;
+  const client = await prisma.client.findUnique({ where: { id } });
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  let content = req.body?.content;
+  if (typeof content !== 'string') {
+    return res.status(400).json({ error: 'Expected a JSON body with a string "content" field' });
+  }
+  content = content.trim();
+  if (!content) return res.status(400).json({ error: 'Encryption key text cannot be empty' });
+  if (content.length > MAX_KEY_LEN) {
+    return res.status(413).json({ error: `Key text too long (max ${MAX_KEY_LEN} characters)` });
+  }
+
+  const updated = await prisma.client.update({
+    where: { id },
+    data: {
+      backupKey: content,
+      backupKeyUpdatedAt: new Date(),
+      backupKeyUpdatedById: req.user.id,
+    },
+    select: { backupKeyUpdatedAt: true },
+  });
+
+  await log({
+    category: 'client', level: 'AUDIT',
+    message: `Backup encryption key ${client.backupKey ? 'updated' : 'added'} for ${client.name}`,
+    userId: req.user.id, meta: { clientId: id },
+  });
+
+  res.json({
+    ok: true,
+    key: {
+      content,
+      updatedAt: updated.backupKeyUpdatedAt,
+      updatedBy: req.user.username,
+    },
+  });
+}
+
+// DELETE /api/clients/:id/backup/key (admin only)
+async function deleteBackupKey(req, res) {
+  const { id } = req.params;
+  const client = await prisma.client.findUnique({ where: { id } });
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+
+  await prisma.client.update({
+    where: { id },
+    data: {
+      backupKey: null,
+      backupKeyUpdatedAt: null,
+      backupKeyUpdatedById: null,
+    },
+  });
+
+  await log({
+    category: 'client', level: 'AUDIT',
+    message: `Backup encryption key deleted for ${client.name}`,
+    userId: req.user.id, meta: { clientId: id },
+  });
+
+  res.json({ ok: true });
+}
+
 // GET /api/system/backup-usage (admin only)
 async function getUsage(req, res) {
   let totalBytes = 0;
@@ -228,4 +310,4 @@ async function getUsage(req, res) {
   res.json({ totalBytes, count, maxPerFileBytes: MAX_SIZE });
 }
 
-module.exports = { getBackupInfo, uploadBackup, downloadBackup, deleteBackup, getUsage, MAX_SIZE };
+module.exports = { getBackupInfo, uploadBackup, downloadBackup, deleteBackup, setBackupKey, deleteBackupKey, getUsage, MAX_SIZE };

@@ -66,6 +66,11 @@ model Client {
   backupUploadedAt   DateTime?
   backupUploadedById String?
 
+  // Emergency encryption key (v1.9) — stored as text alongside the backup
+  backupKey            String?
+  backupKeyUpdatedAt   DateTime?
+  backupKeyUpdatedById String?
+
   permissions Permission[]
 }
 
