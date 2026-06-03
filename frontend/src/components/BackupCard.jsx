@@ -10,11 +10,21 @@ function fmtSize(b) {
 }
 function fmtDate(d) { return d ? new Date(d).toLocaleString() : '—'; }
 
+// Files above SINGLE_MAX are uploaded in CHUNK_SIZE slices so each request stays
+// under the ~100 MB Cloudflare/proxy body cap. The server reassembles them.
+const CHUNK_SIZE = 80 * 1024 * 1024;   // 80 MB
+const SINGLE_MAX = 90 * 1024 * 1024;   // one-shot below this
+function genUploadId() {
+  try { if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID(); } catch (_) {}
+  return 'u-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+}
+
 export default function BackupCard({ client, isAdmin, onChange }) {
   const [info, setInfo] = useState(null);     // { backup, maxSize }
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
+  const [uploadMsg, setUploadMsg] = useState('');
   const [confirmReplace, setConfirmReplace] = useState(null); // pending File
   const [err, setErr] = useState('');
   const inputRef = useRef(null);
@@ -69,25 +79,63 @@ export default function BackupCard({ client, isAdmin, onChange }) {
 
   async function doUpload(file) {
     setConfirmReplace(null);
-    setUploading(true); setUploadPct(0); setErr('');
-
-    const form = new FormData();
-    form.append('backup', file);
-
+    setUploading(true); setUploadPct(0); setUploadMsg(''); setErr('');
     try {
-      await api.post(`/clients/${client.id}/backup`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (e) => {
-          if (e.total) setUploadPct(Math.round((e.loaded / e.total) * 100));
-        },
-        timeout: 0,
-      });
+      if (file.size <= SINGLE_MAX) {
+        const form = new FormData();
+        form.append('backup', file);
+        await api.post(`/clients/${client.id}/backup`, form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (e) => { if (e.total) setUploadPct(Math.round((e.loaded / e.total) * 100)); },
+          timeout: 0,
+        });
+      } else {
+        await uploadChunked(file);
+      }
       await load();
       onChange?.();
     } catch (e) {
       setErr(e.response?.data?.error || e.message || 'Upload failed');
     } finally {
-      setUploading(false); setUploadPct(0);
+      setUploading(false); setUploadPct(0); setUploadMsg('');
+    }
+  }
+
+  // Slice the file and send each part as its own request, then ask the server to
+  // reassemble. Keeps every request under the proxy's body-size cap.
+  async function uploadChunked(file) {
+    const uploadId = genUploadId();
+    const total = Math.ceil(file.size / CHUNK_SIZE);
+    let sentBytes = 0;
+    try {
+      for (let index = 0; index < total; index++) {
+        const start = index * CHUNK_SIZE;
+        const blob = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
+        const form = new FormData();
+        form.append('uploadId', uploadId);
+        form.append('index', String(index));
+        form.append('total', String(total));
+        form.append('chunk', blob, `${file.name}.part${index}`);
+        const base = sentBytes;
+        setUploadMsg(`part ${index + 1}/${total}`);
+        await api.post(`/clients/${client.id}/backup/chunk`, form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (e) => {
+            const loaded = base + (e.loaded || 0);
+            setUploadPct(Math.min(99, Math.round((loaded / file.size) * 100)));
+          },
+          timeout: 0,
+        });
+        sentBytes += blob.size;
+        setUploadPct(Math.min(99, Math.round((sentBytes / file.size) * 100)));
+      }
+      setUploadMsg('finalizing…');
+      await api.post(`/clients/${client.id}/backup/chunk/complete`, { uploadId, filename: file.name, total });
+      setUploadPct(100);
+    } catch (e) {
+      // best-effort: tell the server to discard the staged parts
+      try { await api.post(`/clients/${client.id}/backup/chunk/abort`, { uploadId }); } catch (_) {}
+      throw e;
     }
   }
 
@@ -212,7 +260,7 @@ export default function BackupCard({ client, isAdmin, onChange }) {
       {uploading && (
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-xs text-slate-300">
-            <Loader2 size={12} className="animate-spin text-brand"/> Uploading… {uploadPct}%
+            <Loader2 size={12} className="animate-spin text-brand"/> Uploading… {uploadPct}%{uploadMsg && ` (${uploadMsg})`}
           </div>
           <div className="w-full h-2 bg-bg-soft rounded-full overflow-hidden">
             <div className="h-full bg-brand transition-all duration-200" style={{ width: `${uploadPct}%` }}/>
@@ -249,7 +297,7 @@ export default function BackupCard({ client, isAdmin, onChange }) {
       </div>
 
       <p className="text-xs text-slate-500">
-        Max size {fmtSize(info?.maxSize || 800 * 1024 * 1024)} • .tar or .tar.gz only • One backup stored per client
+        Max size {fmtSize(info?.maxSize || 800 * 1024 * 1024)} • .tar or .tar.gz only • One backup per client • Large files upload in parts automatically
       </p>
 
       {/* Emergency encryption key */}

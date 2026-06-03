@@ -16,6 +16,13 @@ const upload = multer({
   },
 });
 
+// Chunked-upload parts: capped at 95 MB so each request clears the ~100 MB proxy limit.
+const CHUNK_MAX = parseInt(process.env.BACKUP_CHUNK_MAX_BYTES || String(95 * 1024 * 1024), 10);
+const chunkUpload = multer({
+  dest: TMP_DIR,
+  limits: { fileSize: CHUNK_MAX, files: 1, fields: 10 },
+});
+
 router.use(requireAuth);
 
 // Read endpoints — admin or assigned user
@@ -25,6 +32,11 @@ router.get('/download', c.downloadBackup);
 // Mutating endpoints — admin only
 router.post('/', requireRole('ADMIN'), upload.single('backup'), c.uploadBackup);
 router.delete('/', requireRole('ADMIN'), c.deleteBackup);
+
+// Chunked upload (large files behind a proxy body-size cap) — admin only
+router.post('/chunk', requireRole('ADMIN'), chunkUpload.single('chunk'), c.uploadChunk);
+router.post('/chunk/complete', requireRole('ADMIN'), c.completeChunkedUpload);
+router.post('/chunk/abort', requireRole('ADMIN'), c.abortChunkedUpload);
 
 // Emergency encryption key (text) — read via GET '/', write/delete admin only
 router.put('/key', requireRole('ADMIN'), c.setBackupKey);
