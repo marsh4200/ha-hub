@@ -239,7 +239,7 @@ export default function BackupCard({ client, isAdmin, onChange }) {
       </div>
 
       {err && (
-        <div className="text-sm bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg p-2 flex items-center gap-2">
+        <div className="text-sm bg-down/10 text-down border border-down/25 rounded-lg p-2 flex items-center gap-2">
           <AlertTriangle size={14}/>{err}
         </div>
       )}
@@ -309,7 +309,7 @@ export default function BackupCard({ client, isAdmin, onChange }) {
         </div>
 
         {keyErr && (
-          <div className="text-sm bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg p-2 flex items-center gap-2">
+          <div className="text-sm bg-down/10 text-down border border-down/25 rounded-lg p-2 flex items-center gap-2">
             <AlertTriangle size={14}/>{keyErr}
           </div>
         )}
@@ -383,7 +383,7 @@ export default function BackupCard({ client, isAdmin, onChange }) {
         <div className="fixed inset-0 z-50 bg-black/70 grid place-items-center p-4" onClick={() => setConfirmReplace(null)}>
           <div className="card p-5 max-w-md w-full" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-amber-400">
+              <div className="flex items-center gap-2 text-warn">
                 <AlertTriangle size={18}/>
                 <h3 className="font-semibold">Replace existing backup?</h3>
               </div>

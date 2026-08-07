@@ -24,6 +24,28 @@ HAHUB_MODE=docker HAHUB_PORT=9000 HAHUB_NONINTERACTIVE=1 \
 
 Vars: `HAHUB_REPO`, `HAHUB_BRANCH`, `HAHUB_DIR`, `HAHUB_MODE` (docker|native), `HAHUB_PORT`, `HAHUB_NONINTERACTIVE`.
 
+### Runtime settings (`.env`)
+
+Everything below has a working default — a fresh install and an upgrade both run
+fine without setting any of them.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `URL_POLL_INTERVAL_SECONDS` | `30` | How often each site is checked for liveness |
+| `URL_POLL_TIMEOUT_SECONDS` | `10` | Timeout for the unauthenticated URL probe |
+| `HA_DETAIL_INTERVAL_SECONDS` | `300` | How often to pull the full `/api/states` sweep from token-linked sites |
+| `HA_API_TIMEOUT_SECONDS` | `15` | Per-request timeout against a client's Home Assistant |
+| `POLL_CONCURRENCY` | `8` | How many sites are probed in parallel |
+| `TOKEN_ENCRYPTION_KEY` | derived from `JWT_SECRET` | Key the encryption of stored Home Assistant tokens independently |
+| `HEARTBEAT_TIMEOUT_SECONDS` | `90` | How long before a silent site is marked offline |
+| `BACKUP_DIR` | `/app/data/backups` | Where per-site backups are stored |
+
+See [HA-TOKEN.md](HA-TOKEN.md) for how the Home Assistant access tokens work.
+
+> Changing `TOKEN_ENCRYPTION_KEY` (or `JWT_SECRET`) on an install that already has
+> saved Home Assistant tokens makes those tokens unreadable. They show as **Token
+> unreadable** and need pasting again.
+
 ---
 
 ## Manual Docker install

@@ -8,14 +8,16 @@ router.get('/stats', requireAuth, async (req, res) => {
   const where = req.user.role === 'ADMIN'
     ? {}
     : { permissions: { some: { userId: req.user.id } } };
-  const [total, online, offline, unknown] = await Promise.all([
+  const [total, online, offline, unknown, updatesAvailable, linked] = await Promise.all([
     prisma.client.count({ where }),
     prisma.client.count({ where: { ...where, status: 'ONLINE' } }),
     prisma.client.count({ where: { ...where, status: 'OFFLINE' } }),
     prisma.client.count({ where: { ...where, status: 'UNKNOWN' } }),
+    prisma.client.count({ where: { ...where, updateAvailable: true } }),
+    prisma.client.count({ where: { ...where, NOT: { haToken: null } } }),
   ]);
   const userCount = req.user.role === 'ADMIN' ? await prisma.user.count() : null;
-  res.json({ total, online, offline, unknown, userCount });
+  res.json({ total, online, offline, unknown, updatesAvailable, linked, userCount });
 });
 
 router.get('/export', requireAuth, requireRole('ADMIN'), async (req, res) => {
@@ -24,10 +26,13 @@ router.get('/export', requireAuth, requireRole('ADMIN'), async (req, res) => {
     prisma.client.findMany(),
     prisma.permission.findMany(),
   ]);
-  const sanitizedClients = clients.map(c => ({
+  const sanitizedClients = clients.map(({ haToken, apiToken, ...c }) => ({
     ...c,
     uptime: c.uptime != null ? Number(c.uptime) : null,
     backupSize: c.backupSize != null ? Number(c.backupSize) : null,
+    // Secrets are never exported: the encrypted HA long-lived token and the
+    // agent API token both stay server-side.
+    hasHaToken: !!haToken,
   }));
   res.setHeader('Content-Disposition', `attachment; filename=ha-hub-export-${Date.now()}.json`);
   res.json({ exportedAt: new Date(), users, clients: sanitizedClients, permissions });

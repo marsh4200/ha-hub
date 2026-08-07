@@ -147,7 +147,7 @@ export default function Settings() {
 
       {/* "Just updated" banner — only shows after a real version change */}
       {justUpdated && (
-        <div className="rounded-lg p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-2 animate-fadein">
+        <div className="rounded-lg p-3 bg-live/10 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-2 animate-fadein">
           <Sparkles size={16}/>
           <span className="flex items-center gap-1 flex-wrap">
             Update complete —
@@ -160,8 +160,8 @@ export default function Settings() {
 
       <div className="card p-5">
         <h2 className="font-medium mb-3 flex items-center gap-2"><KeyRound size={16}/>Change password</h2>
-        {msg && <div className="text-sm text-emerald-400 mb-2">{msg}</div>}
-        {err && <div className="text-sm text-red-400 mb-2">{err}</div>}
+        {msg && <div className="text-sm text-live mb-2">{msg}</div>}
+        {err && <div className="text-sm text-down mb-2">{err}</div>}
         <form onSubmit={changePw} className="space-y-3">
           <div><label className="label">Current password</label><input className="input" type="password" required value={pw.currentPassword} onChange={e=>setPw({...pw, currentPassword:e.target.value})}/></div>
           <div className="grid grid-cols-2 gap-3">
@@ -185,7 +185,7 @@ export default function Settings() {
                     <span className="text-slate-400">Latest version</span>
                     <span className="font-mono text-slate-200">
                       {info.remote.version}
-                      {info.upToDate && <span className="ml-2 text-emerald-400 text-xs">✓ up to date</span>}
+                      {info.upToDate && <span className="ml-2 text-live text-xs">✓ up to date</span>}
                     </span>
                   </div>
                 )}
@@ -195,7 +195,7 @@ export default function Settings() {
               </div>
 
               {upToDateMsg && (
-                <div className="text-sm rounded-lg p-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-2">
+                <div className="text-sm rounded-lg p-2 bg-live/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-2">
                   <CheckCircle2 size={14}/>{upToDateMsg}
                 </div>
               )}
@@ -215,12 +215,12 @@ export default function Settings() {
               )}
 
               {s.status === 'error' && !isRunning && (
-                <div className="text-sm rounded-lg p-2 bg-red-500/10 border border-red-500/30 text-red-400 flex items-center gap-2">
+                <div className="text-sm rounded-lg p-2 bg-down/10 border border-red-500/30 text-down flex items-center gap-2">
                   <AlertCircle size={14}/>{s.message || 'Update failed'}
                 </div>
               )}
 
-              {requestErr && <div className="text-sm rounded-lg p-2 bg-red-500/10 text-red-400">{requestErr}</div>}
+              {requestErr && <div className="text-sm rounded-lg p-2 bg-down/10 text-down">{requestErr}</div>}
 
               <div className="flex gap-2 justify-end">
                 <button className="btn-secondary" onClick={checkUpdates} disabled={checking || updating}>

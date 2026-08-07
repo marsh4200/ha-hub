@@ -1,38 +1,157 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ── Base ─────────────────────────────────────────────────────────────── */
+
 html, body, #root { height: 100%; }
 
-@keyframes fadein {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
+body {
+  background:
+    radial-gradient(1100px 520px at 12% -8%, rgba(3, 169, 244, 0.10), transparent 62%),
+    radial-gradient(760px 400px at 92% 4%, rgba(3, 169, 244, 0.05), transparent 60%),
+    #070A10;
+  background-attachment: fixed;
+  color: #E2E8F0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-@keyframes fadeout {
-  from { opacity: 1; }
-  to   { opacity: 0; }
+
+/* Version numbers, entity counts and latencies all need to line up column to
+   column, so every numeric readout is monospaced with tabular figures. */
+.tnum { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+
+::selection { background: rgba(3, 169, 244, 0.3); }
+
+*:focus-visible {
+  outline: 2px solid #03A9F4;
+  outline-offset: 2px;
+  border-radius: 4px;
 }
-.animate-fadein { animation: fadein 0.4s ease-out; }
-.animate-fadeout { animation: fadeout 0.6s ease-out forwards; }
+
+/* Thin scrollbars that don't fight the dark surface */
+* { scrollbar-width: thin; scrollbar-color: #2B3A4F transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #2B3A4F; border-radius: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Components ───────────────────────────────────────────────────────── */
 
 @layer components {
-  .btn { @apply inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition; }
-  .btn-primary { @apply btn bg-brand hover:bg-brand-dark text-white disabled:opacity-50 disabled:cursor-not-allowed; }
-  .btn-secondary { @apply btn bg-bg-card hover:bg-line border border-line text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed; }
-  .btn-danger { @apply btn bg-red-600 hover:bg-red-700 text-white; }
-  .card { @apply bg-bg-card border border-line rounded-xl; }
-  .input {
-    @apply w-full bg-bg-soft border border-line rounded-lg px-3 py-2 text-sm
-           focus:outline-none focus:ring-2 focus:ring-brand;
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium
+           transition-all duration-150 active:scale-[0.98] disabled:opacity-40
+           disabled:cursor-not-allowed disabled:active:scale-100 whitespace-nowrap;
   }
-  .label { @apply block text-xs font-medium text-slate-400 mb-1; }
-  .badge { @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium; }
-  .badge-online { @apply badge bg-emerald-500/15 text-emerald-400; }
-  .badge-offline { @apply badge bg-red-500/15 text-red-400; }
-  .badge-unknown { @apply badge bg-slate-500/15 text-slate-400; }
+  .btn-primary {
+    @apply btn text-white;
+    background: linear-gradient(180deg, #0AB4FF 0%, #0288D1 100%);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset, 0 6px 18px -8px rgba(3,169,244,0.7);
+  }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn-secondary {
+    @apply btn bg-bg-raised border border-line hover:border-line-bright hover:bg-bg-card text-slate-200;
+  }
+  .btn-ghost {
+    @apply btn text-slate-400 hover:text-slate-100 hover:bg-bg-raised;
+  }
+  .btn-danger {
+    @apply btn bg-down/15 border border-down/30 text-down hover:bg-down/25;
+  }
+  .btn-icon { @apply !px-2 !py-2; }
+
+  .card {
+    @apply bg-bg-card border border-line rounded-xl shadow-panel;
+  }
+
+  .input {
+    @apply w-full bg-bg/70 border border-line rounded-lg px-3 py-2.5 text-sm text-slate-100
+           placeholder:text-slate-600 transition-colors
+           focus:outline-none focus:border-brand/70 focus:ring-2 focus:ring-brand/20;
+  }
+  .label { @apply block text-2xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5; }
+  .hint  { @apply text-xs text-slate-500 mt-1.5 leading-relaxed; }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium
+           border tnum;
+  }
+  .chip-neutral { @apply chip bg-bg-raised border-line text-slate-400; }
+  .chip-live    { @apply chip bg-live/10 border-live/25 text-live; }
+  .chip-down    { @apply chip bg-down/10 border-down/25 text-down; }
+  .chip-warn    { @apply chip bg-warn/10 border-warn/25 text-warn; }
+  .chip-brand   { @apply chip bg-brand/10 border-brand/25 text-brand; }
+
+  .eyebrow {
+    @apply text-2xs font-semibold uppercase tracking-[0.14em] text-slate-500;
+  }
 }
 
-.dot { width: 8px; height: 8px; border-radius: 9999px; display: inline-block; }
-.dot-online { background: #10b981; box-shadow: 0 0 0 4px rgba(16,185,129,0.15); }
-.dot-offline { background: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,0.15); }
-.dot-unknown { background: #94a3b8; box-shadow: 0 0 0 4px rgba(148,163,184,0.15); }
+/* ── Status dot ───────────────────────────────────────────────────────── */
+
+.dot { width: 7px; height: 7px; border-radius: 9999px; display: inline-block; flex: none; }
+.dot-online  { background: #22C55E; }
+.dot-online.dot-pulse { animation: pulseRing 2.4s ease-out infinite; }
+.dot-offline { background: #FB7185; box-shadow: 0 0 0 3px rgba(251,113,133,0.15); }
+.dot-unknown { background: #64748B; box-shadow: 0 0 0 3px rgba(100,116,139,0.12); }
+
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
+  70%  { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+  100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+}
+
+/* ── Client card status rail ──────────────────────────────────────────── */
+/* The left edge of every card carries the site's health. Scanning the rail
+   down the page is the fastest read of the whole fleet. */
+
+.rail { position: relative; overflow: hidden; }
+.rail::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 12px 0 0 12px;
+}
+.rail-live::before { background: linear-gradient(180deg, #22C55E, #15803D); }
+.rail-down::before { background: linear-gradient(180deg, #FB7185, #BE123C); }
+.rail-warn::before { background: linear-gradient(180deg, #FBBF24, #B45309); }
+.rail-idle::before { background: linear-gradient(180deg, #475569, #334155); }
+
+/* ── Skeleton ─────────────────────────────────────────────────────────── */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #16212F;
+  border-radius: 6px;
+}
+.skeleton::after {
+  content: '';
+  position: absolute; inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+  animation: shimmer 1.6s infinite;
+}
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+
+/* ── Legacy animation names still referenced by IdleWarning ───────────── */
+
+@keyframes fadein  { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeout { from { opacity: 1; } to { opacity: 0; } }
+.animate-fadein  { animation: fadein 0.4s ease-out; }
+.animate-fadeout { animation: fadeout 0.6s ease-out forwards; }
+
+/* Safe area for the mobile bottom nav */
+.pb-safe { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4.75rem); }
+@media (min-width: 1024px) { .pb-safe { padding-bottom: 2rem; } }

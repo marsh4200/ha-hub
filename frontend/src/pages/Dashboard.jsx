@@ -1,162 +1,227 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Search, ExternalLink, Activity, CheckCircle2, XCircle, HelpCircle, Download, FileArchive } from 'lucide-react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { Search, AlertTriangle, RefreshCw, Inbox } from 'lucide-react';
 import api from '../services/api';
 import { useSocket } from '../hooks/useSocket';
 import { useNow } from '../hooks/useNow';
-import StatusBadge from '../components/StatusBadge.jsx';
-
-function relTime(d, now) {
-  if (!d) return 'never';
-  const s = Math.floor((now - new Date(d).getTime()) / 1000);
-  if (s < 5)   return 'just now';
-  if (s < 60)  return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
+import { useAuth } from '../context/AuthContext.jsx';
+import ClientCard from '../components/ClientCard.jsx';
+import FleetBar from '../components/FleetBar.jsx';
+import { triage } from '../lib/format';
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const [clients, setClients] = useState([]);
-  const [stats, setStats] = useState({ total: 0, online: 0, offline: 0, unknown: 0 });
+  const [stats, setStats] = useState({ total: 0, online: 0, offline: 0, unknown: 0, updatesAvailable: 0, linked: 0 });
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(null);
   const now = useNow(1000);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const [c, s] = await Promise.all([api.get('/clients'), api.get('/system/stats')]);
       setClients(c.data.clients);
       setStats(s.data);
-    } catch (_) {}
-  }
-  useEffect(() => { load(); }, []);
-  useEffect(() => {
-    const id = setInterval(load, 10_000);
-    return () => clearInterval(id);
+    } catch (_) {
+      /* transient — the poller will bring us back */
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const id = setInterval(load, 15_000);
+    return () => clearInterval(id);
+  }, [load]);
 
   useSocket((ev, payload) => {
     if (ev === 'client:update') {
-      setClients(prev => prev.map(c => c.id === payload.id ? { ...c, ...payload } : c));
+      setClients(prev => prev.map(c => (c.id === payload.id ? { ...c, ...payload } : c)));
       api.get('/system/stats').then(r => setStats(r.data)).catch(() => {});
     } else if (ev === 'reconnect') {
       load();
     }
   });
 
+  const attentionCount = useMemo(
+    () => clients.filter(c => ['down', 'warn'].includes(triage(c))).length,
+    [clients]
+  );
+
   const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
     return clients.filter(c => {
-      if (filter !== 'all' && c.status.toLowerCase() !== filter) return false;
-      if (!q) return true;
-      const s = q.toLowerCase();
-      return c.name.toLowerCase().includes(s) ||
-             (c.hostname || '').toLowerCase().includes(s) ||
-             (c.group || '').toLowerCase().includes(s) ||
-             (c.tags || []).some(t => t.toLowerCase().includes(s));
+      if (filter === 'attention') {
+        if (!['down', 'warn'].includes(triage(c))) return false;
+      } else if (filter !== 'all' && (c.status || '').toLowerCase() !== filter) {
+        return false;
+      }
+      if (!term) return true;
+      return (
+        c.name.toLowerCase().includes(term) ||
+        (c.locationName || '').toLowerCase().includes(term) ||
+        (c.url || '').toLowerCase().includes(term) ||
+        (c.hostname || '').toLowerCase().includes(term) ||
+        (c.group || '').toLowerCase().includes(term) ||
+        (c.haVersion || '').toLowerCase().includes(term) ||
+        (c.tags || []).some(t => t.toLowerCase().includes(term))
+      );
     });
   }, [clients, q, filter]);
 
-  async function downloadBackup(e, client) {
-    e.preventDefault(); e.stopPropagation();
+  // Triage ordering: broken first, then waiting, then healthy. Within a band,
+  // alphabetical so a site keeps a stable position between polls.
+  const { needsAttention, healthy } = useMemo(() => {
+    const rank = { down: 0, warn: 1, idle: 2, live: 3 };
+    const sorted = [...filtered].sort((a, b) => {
+      const d = rank[triage(a)] - rank[triage(b)];
+      return d !== 0 ? d : a.name.localeCompare(b.name);
+    });
+    return {
+      needsAttention: sorted.filter(c => ['down', 'warn'].includes(triage(c))),
+      healthy: sorted.filter(c => !['down', 'warn'].includes(triage(c))),
+    };
+  }, [filtered]);
+
+  async function downloadBackup(client) {
     try {
       const meta = await api.get(`/clients/${client.id}/backup`);
-      if (!meta.data?.backup) {
-        alert('No backup available for this client');
-        return;
-      }
+      if (!meta.data?.backup) return alert('No backup stored for this site.');
       const res = await api.get(`/clients/${client.id}/backup/download`, { responseType: 'blob', timeout: 0 });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
-      a.href = url; a.download = meta.data.backup.filename; a.click();
+      a.href = url;
+      a.download = meta.data.backup.filename;
+      a.click();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (err) {
-      alert(err.response?.data?.error || 'Download failed');
+      alert(err.response?.data?.error || 'Download failed.');
     }
   }
 
+  async function refreshOne(client) {
+    setRefreshing(client.id);
+    try {
+      const { data } = await api.post(`/clients/${client.id}/refresh`);
+      setClients(prev => prev.map(c => (c.id === client.id ? { ...c, ...data.client } : c)));
+      api.get('/system/stats').then(r => setStats(r.data)).catch(() => {});
+    } catch (err) {
+      alert(err.response?.data?.error || 'Could not reach that site.');
+    } finally {
+      setRefreshing(null);
+    }
+  }
+
+  const cardProps = {
+    now,
+    onDownloadBackup: downloadBackup,
+    onRefresh: refreshOne,
+    canRefresh: isAdmin,
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      <header className="flex items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-slate-400 text-sm">Live status of your Home Assistant instances</p>
+          <div className="eyebrow mb-1">Fleet</div>
+          <h1 className="text-2xl font-semibold tracking-tight">Sites</h1>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span className="dot dot-online"></span>
-          <span>Live</span>
-        </div>
+        <button
+          onClick={load}
+          className="btn-ghost !px-2.5 !py-2 text-xs"
+          title="Reload"
+        >
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+          <span className="hidden sm:inline">Reload</span>
+        </button>
+      </header>
+
+      <FleetBar stats={stats} attention={attentionCount} filter={filter} onFilter={setFilter} />
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none" size={16} />
+        <input
+          className="input pl-9"
+          placeholder="Search by name, version, tag or address"
+          value={q}
+          onChange={e => setQ(e.target.value)}
+        />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Total"   value={stats.total}   icon={<Activity className="text-slate-300"/>} />
-        <StatCard label="Online"  value={stats.online}  icon={<CheckCircle2 className="text-emerald-400"/>} />
-        <StatCard label="Offline" value={stats.offline} icon={<XCircle className="text-red-400"/>} />
-        <StatCard label="Unknown" value={stats.unknown} icon={<HelpCircle className="text-slate-400"/>} />
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-2.5 text-slate-500" size={16}/>
-          <input className="input pl-9" placeholder="Search clients, tags, hostnames…" value={q} onChange={e => setQ(e.target.value)} />
+      {loading ? (
+        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {[0, 1, 2, 3, 4, 5].map(i => <div key={i} className="skeleton h-[190px] rounded-xl" />)}
         </div>
-        <div className="flex gap-1 bg-bg-card border border-line rounded-lg p-1">
-          {['all', 'online', 'offline', 'unknown'].map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 text-sm rounded-md capitalize ${filter === f ? 'bg-brand text-white' : 'text-slate-300 hover:bg-bg-soft'}`}>{f}</button>
-          ))}
-        </div>
-      </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState hasClients={clients.length > 0} isAdmin={isAdmin} onClear={() => { setQ(''); setFilter('all'); }} />
+      ) : (
+        <div className="space-y-6">
+          {needsAttention.length > 0 && (
+            <section>
+              <SectionHead
+                icon={<AlertTriangle size={13} className="text-warn" />}
+                label="Needs attention"
+                count={needsAttention.length}
+              />
+              <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {needsAttention.map(c => <ClientCard key={c.id} client={c} {...cardProps} />)}
+              </div>
+            </section>
+          )}
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filtered.map(c => (
-          <a key={c.id} href={c.url} target="_blank" rel="noreferrer"
-             className="card p-4 hover:border-brand/50 transition group relative">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="font-medium truncate">{c.name}</div>
-                <div className="text-xs text-slate-500 truncate">{c.url}</div>
-              </div>
-              <StatusBadge status={c.status} />
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
-              <div><div className="text-slate-500">HA Version</div><div className="text-slate-200">{c.haVersion || '—'}</div></div>
-              <div><div className="text-slate-500">Last seen</div><div className="text-slate-200">{relTime(c.lastSeenAt, now)}</div></div>
-            </div>
-            {c.tags?.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1">
-                {c.tags.map(t => <span key={t} className="text-[10px] bg-bg-soft border border-line px-2 py-0.5 rounded">{t}</span>)}
-              </div>
-            )}
-            <div className="mt-3 flex items-center justify-between">
-              <div className="text-xs text-brand flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                Open <ExternalLink size={12}/>
-              </div>
-              {c.backupFilename && (
-                <button
-                  onClick={(e) => downloadBackup(e, c)}
-                  className="text-xs text-slate-400 hover:text-brand flex items-center gap-1"
-                  title={`Download backup: ${c.backupFilename}`}
-                >
-                  <FileArchive size={12}/><Download size={12}/>Backup
-                </button>
+          {healthy.length > 0 && (
+            <section>
+              {needsAttention.length > 0 && (
+                <SectionHead
+                  icon={<span className="dot dot-online" />}
+                  label="All good"
+                  count={healthy.length}
+                />
               )}
-            </div>
-          </a>
-        ))}
-        {filtered.length === 0 && <div className="text-slate-500 text-sm col-span-full text-center py-10">No clients match.</div>}
-      </div>
+              <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {healthy.map(c => <ClientCard key={c.id} client={c} {...cardProps} />)}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function StatCard({ label, value, icon }) {
+function SectionHead({ icon, label, count }) {
   return (
-    <div className="card p-4 flex items-center gap-3">
-      <div className="w-10 h-10 rounded-lg bg-bg-soft grid place-items-center">{icon}</div>
-      <div>
-        <div className="text-xs text-slate-500">{label}</div>
-        <div className="text-xl font-semibold">{value}</div>
-      </div>
+    <div className="flex items-center gap-2 mb-2.5">
+      {icon}
+      <span className="eyebrow">{label}</span>
+      <span className="text-2xs text-slate-600 tnum">{count}</span>
+      <div className="flex-1 h-px bg-line" />
+    </div>
+  );
+}
+
+function EmptyState({ hasClients, isAdmin, onClear }) {
+  return (
+    <div className="card p-12 text-center">
+      <Inbox className="mx-auto text-slate-700 mb-3" size={28} />
+      {hasClients ? (
+        <>
+          <p className="text-slate-400 text-sm">Nothing matches that search.</p>
+          <button className="btn-secondary mt-4" onClick={onClear}>Clear filters</button>
+        </>
+      ) : (
+        <>
+          <p className="text-slate-300 font-medium">No sites yet</p>
+          <p className="text-slate-500 text-sm mt-1">
+            {isAdmin
+              ? 'Add your first Home Assistant site from the Sites page.'
+              : 'You have not been given access to any sites yet.'}
+          </p>
+        </>
+      )}
     </div>
   );
 }

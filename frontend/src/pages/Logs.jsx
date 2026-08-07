@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 
-const LEVEL_COLOR = { INFO: 'text-slate-300', WARN: 'text-amber-400', ERROR: 'text-red-400', AUDIT: 'text-brand' };
+const LEVEL_CHIP = { INFO: 'chip-neutral', WARN: 'chip-warn', ERROR: 'chip-down', AUDIT: 'chip-brand' };
 
 export default function Logs() {
   const [data, setData] = useState({ items: [], total: 0, page: 1, pageSize: 50 });
@@ -20,8 +20,10 @@ export default function Logs() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-semibold">Logs</h1>
-        <p className="text-slate-400 text-sm">Audit & activity logs</p></div>
+      <div>
+        <div className="eyebrow mb-1">Administration</div>
+        <h1 className="text-2xl font-semibold tracking-tight">Activity</h1>
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <select className="input max-w-xs" value={category} onChange={e=>setCategory(e.target.value)}>
@@ -33,23 +35,23 @@ export default function Logs() {
         </select>
       </div>
 
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="text-left text-slate-400 bg-bg-soft">
+      <div className="card overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
+          <thead className="text-left text-2xs uppercase tracking-wider text-slate-500 bg-bg-soft">
             <tr><th className="px-4 py-2.5 font-medium">Time</th><th className="font-medium">Level</th>
               <th className="font-medium">Category</th><th className="font-medium">Message</th><th className="font-medium">User</th></tr>
           </thead>
           <tbody>
             {data.items.map(l => (
               <tr key={l.id} className="border-t border-line">
-                <td className="px-4 py-2 text-slate-400 whitespace-nowrap">{new Date(l.createdAt).toLocaleString()}</td>
-                <td className={LEVEL_COLOR[l.level] || ''}>{l.level}</td>
+                <td className="px-4 py-2 text-slate-500 whitespace-nowrap font-mono text-2xs tnum">{new Date(l.createdAt).toLocaleString()}</td>
+                <td><span className={LEVEL_CHIP[l.level] || 'chip-neutral'}>{l.level}</span></td>
                 <td className="text-slate-400">{l.category}</td>
                 <td>{l.message}</td>
                 <td className="text-slate-400">{l.user?.username || '—'}</td>
               </tr>
             ))}
-            {data.items.length === 0 && <tr><td colSpan="5" className="text-center text-slate-500 py-10">No logs.</td></tr>}
+            {data.items.length === 0 && <tr><td colSpan="5" className="text-center text-slate-500 py-10">Nothing recorded yet.</td></tr>}
           </tbody>
         </table>
       </div>

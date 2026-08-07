@@ -60,14 +60,16 @@ export default function Users() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-semibold">Users</h1>
-          <p className="text-slate-400 text-sm">Manage who can access the platform and which clients they see</p></div>
+        <div>
+          <div className="eyebrow mb-1">Administration</div>
+          <h1 className="text-2xl font-semibold tracking-tight">People</h1>
+        </div>
         <button className="btn-primary" onClick={() => open(null)}><Plus size={16}/>Add user</button>
       </div>
 
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="text-left text-slate-400 bg-bg-soft">
+      <div className="card overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
+          <thead className="text-left text-2xs uppercase tracking-wider text-slate-500 bg-bg-soft">
             <tr><th className="px-4 py-2.5 font-medium">User</th><th className="font-medium">Role</th>
               <th className="font-medium">Clients</th><th className="font-medium">Last login</th>
               <th className="px-4 font-medium text-right">Actions</th></tr>
@@ -77,11 +79,11 @@ export default function Users() {
               <tr key={u.id} className="border-t border-line">
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
-                    {u.role === 'ADMIN' ? <Shield className="text-amber-400" size={16}/> : <UserIcon className="text-slate-400" size={16}/>}
+                    {u.role === 'ADMIN' ? <Shield className="text-warn" size={16}/> : <UserIcon className="text-slate-400" size={16}/>}
                     <div><div>{u.username}</div><div className="text-xs text-slate-500">{u.email || '—'}</div></div>
                   </div>
                 </td>
-                <td><span className={u.role === 'ADMIN' ? 'badge bg-amber-500/15 text-amber-400' : 'badge bg-slate-500/15 text-slate-300'}>{u.role}</span></td>
+                <td><span className={u.role === 'ADMIN' ? 'chip-warn' : 'chip-neutral'}>{u.role === 'ADMIN' ? 'Administrator' : 'Standard'}</span></td>
                 <td className="text-slate-400">{u.role === 'ADMIN' ? 'All' : `${u.clientIds.length}`}</td>
                 <td className="text-slate-400">{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never'}</td>
                 <td className="px-4 py-2 text-right">
@@ -104,7 +106,7 @@ export default function Users() {
               <button onClick={() => setShowModal(false)}><X size={18}/></button>
             </div>
             <form onSubmit={save} className="space-y-3">
-              {err && <div className="text-sm bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg p-2">{err}</div>}
+              {err && <div className="text-sm bg-down/10 text-down border border-down/25 rounded-lg p-2">{err}</div>}
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label">Username</label>
                   <input className="input" required disabled={!!editing} value={form.username} onChange={e=>setForm({...form, username:e.target.value})}/></div>

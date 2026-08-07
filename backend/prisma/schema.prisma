@@ -71,6 +71,29 @@ model Client {
   backupKeyUpdatedAt   DateTime?
   backupKeyUpdatedById String?
 
+  // Home Assistant REST API (v1.11)
+  // haToken is AES-256-GCM encrypted; haTokenHint is the last 6 chars, plain,
+  // purely so the UI can show which token is on file without decrypting.
+  haToken          String?
+  haTokenHint      String?
+  haTokenSetAt     DateTime?
+  haTokenStatus    String?   // OK | UNAUTHORIZED | UNREACHABLE | DECRYPT_FAILED
+  haTokenCheckedAt DateTime?
+
+  locationName     String?
+  timeZone         String?
+  haState          String?   // RUNNING | STARTING
+  entityCount      Int?
+  unavailableCount Int?
+  integrationCount Int?
+  automationCount  Int?
+  updateAvailable  Boolean   @default(false)
+  latestVersion    String?
+  pendingUpdates   Int?
+  latencyMs        Int?
+  lastDetailAt     DateTime?
+  haDetails        Json?
+
   permissions Permission[]
 }
 

@@ -13,7 +13,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const { initSocket } = require('./services/socket');
 const { startOfflineWatcher } = require('./services/offlineWatcher');
-const { startUrlPoller } = require('./services/urlPoller');
+const { startStatusPoller } = require('./services/statusPoller');
 
 const app = express();
 const server = http.createServer(app);
@@ -81,7 +81,7 @@ app.use((err, req, res, _next) => {
 
 initSocket(server);
 startOfflineWatcher();
-startUrlPoller();
+startStatusPoller();
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 server.listen(PORT, () => {

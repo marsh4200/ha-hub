@@ -1,6 +1,6 @@
 {
   "name": "ha-hub-backend",
-  "version": "1.8.0",
+  "version": "1.11.0",
   "description": "HA-Hub backend API",
   "main": "src/server.js",
   "scripts": {

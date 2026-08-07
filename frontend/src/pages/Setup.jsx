@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home } from 'lucide-react';
+import { House } from 'lucide-react';
 import api from '../services/api';
 
 export default function Setup({ onDone }) {
@@ -28,13 +28,13 @@ export default function Setup({ onDone }) {
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-md card p-8">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-lg bg-brand/15 grid place-items-center"><Home className="text-brand" /></div>
+          <div className="w-10 h-10 rounded-lg bg-brand/12 border border-brand/25 grid place-items-center"><House className="text-brand" size={20} /></div>
           <div>
-            <h1 className="text-xl font-semibold">Welcome to HA-Hub</h1>
+            <h1 className="text-xl font-semibold tracking-tight">Welcome to HA-Hub</h1>
             <p className="text-sm text-slate-400">Create your first administrator</p>
           </div>
         </div>
-        {err && <div className="mb-4 text-sm bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg p-3">{err}</div>}
+        {err && <div className="mb-4 text-sm bg-down/10 text-down border border-down/25 rounded-lg p-3">{err}</div>}
         <form onSubmit={submit} className="space-y-3">
           <div><label className="label">Username</label>
             <input className="input" required minLength={3} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} /></div>

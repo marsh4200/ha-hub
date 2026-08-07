@@ -13,6 +13,11 @@ router.patch('/:id', requireRole('ADMIN'), c.updateValidators, handleValidation,
 router.delete('/:id', requireRole('ADMIN'), c.remove);
 router.post('/:id/rotate-token', requireRole('ADMIN'), c.rotateToken);
 
+// v1.11: Home Assistant long-lived access token
+router.post('/:id/ha-token/test', requireRole('ADMIN'), c.testHaToken);
+router.delete('/:id/ha-token', requireRole('ADMIN'), c.clearHaToken);
+router.post('/:id/refresh', requireRole('ADMIN'), c.refresh);
+
 // v1.8: backup endpoints — mounted as /api/clients/:id/backup/*
 router.use('/:id/backup', backupRouter);
 
