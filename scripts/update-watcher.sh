@@ -6,7 +6,10 @@ set -Eeuo pipefail
 INSTALL_DIR="${HAHUB_DIR:-/opt/ha-hub}"
 LOG="/var/log/ha-hub-update.log"
 
-log() { echo "[$(date -Iseconds)] $*" | tee -a "$LOG"; }
+# systemd's StandardOutput=append: already sends stdout to $LOG, so piping
+# through `tee -a "$LOG"` as well wrote every single line to the log twice.
+# Just print; let the unit do the appending.
+log() { echo "[$(date -Iseconds)] $*"; }
 
 # Port the app is published on — needed for the post-restart health check.
 # Read from .env so a non-default PORT doesn't make every update "fail".
@@ -78,8 +81,8 @@ run_update() {
   cd "$INSTALL_DIR"
 
   # Reset any local modifications so git pull never aborts
-  git fetch --all 2>&1 | tee -a "$LOG" || true
-  git reset --hard "origin/${branch}" 2>&1 | tee -a "$LOG" || {
+  git fetch --all 2>&1 || true
+  git reset --hard "origin/${branch}" 2>&1 || {
     set_state error fetching 10 "git reset failed — check log"
     return 1
   }
@@ -93,13 +96,13 @@ run_update() {
   NEW_SHA="$(git rev-parse --short HEAD)"
   set_state running building 30 "Building containers (this can take 1-2 min)"
 
-  if ! docker compose --env-file .env build 2>&1 | tee -a "$LOG"; then
+  if ! docker compose --env-file .env build 2>&1; then
     set_state error building 30 "docker compose build failed"
     return 1
   fi
 
   set_state running restarting 80 "Restarting containers"
-  if ! docker compose --env-file .env up -d --force-recreate 2>&1 | tee -a "$LOG"; then
+  if ! docker compose --env-file .env up -d --force-recreate 2>&1; then
     set_state error restarting 80 "docker compose up failed"
     return 1
   fi
@@ -120,27 +123,41 @@ run_update() {
   return 1
 }
 
-# Main loop
-log "watcher started (install dir $INSTALL_DIR)"
-warned=0
-while true; do
-  if ! detect_volume; then
-    # Say so once rather than failing silently forever — a silent watcher is
-    # exactly what makes the portal sit on "Queued" with no explanation.
-    if [[ "$warned" -eq 0 ]]; then
-      log "WARNING: could not find the ha-hub data volume — is the stack running? Retrying every 10s."
-      warned=1
+# ── Main loop ──────────────────────────────────────────────────────────────
+#
+# Wrapped in a function, and called on the last line, so bash parses the entire
+# script into memory before executing any of it.
+#
+# This matters because run_update does `git reset --hard`, which rewrites this
+# very file while bash is reading it. Bash reads a script by byte offset, so a
+# file that changes length underneath a running shell makes it resume at the
+# wrong place — it silently executes a fragment, or hits EOF and exits mid-update.
+# The portal then sits at "Waiting for API to come back" forever, because the
+# process that was going to write the success state no longer exists.
+main() {
+  log "watcher started (install dir $INSTALL_DIR)"
+  local warned=0
+  while true; do
+    if ! detect_volume; then
+      # Say so once rather than failing silently forever — a silent watcher is
+      # exactly what makes the portal sit on "Queued" with no explanation.
+      if [[ "$warned" -eq 0 ]]; then
+        log "WARNING: could not find the ha-hub data volume — is the stack running? Retrying every 10s."
+        warned=1
+      fi
+      sleep 10
+      continue
     fi
-    sleep 10
-    continue
-  fi
-  if [[ "$warned" -eq 1 ]]; then
-    log "data volume found: $VOLUME_NAME"
-    warned=0
-  fi
-  if [[ -f "$FLAG_PATH" ]]; then
-    rm -f "$FLAG_PATH"
-    run_update || true
-  fi
-  sleep 3
-done
+    if [[ "$warned" -eq 1 ]]; then
+      log "data volume found: $VOLUME_NAME"
+      warned=0
+    fi
+    if [[ -f "$FLAG_PATH" ]]; then
+      rm -f "$FLAG_PATH"
+      run_update || true
+    fi
+    sleep 3
+  done
+}
+
+main "$@"

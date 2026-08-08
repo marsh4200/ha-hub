@@ -139,3 +139,22 @@ Two changes so it cannot recur:
   making the executable bit irrelevant.
 - `update-watcher.sh`, `update.sh` and `apply-update.sh` all `chmod +x scripts/*.sh`
   immediately after the git reset.
+
+### The watcher rewrote itself mid-update
+
+`run_update` calls `git reset --hard`, which overwrites `update-watcher.sh` while
+bash is still reading it. Bash reads a script by byte offset, so a file that
+changes length underneath a running shell resumes at the wrong place — it either
+executes a fragment or hits EOF and exits partway through the update.
+
+The containers rebuild and restart fine, but the process that was going to write
+the success state is gone, so the portal sits on *"Waiting for API to come back"*
+at 95% forever even though the site is healthy.
+
+The whole loop is now wrapped in `main()` and called on the last line, so bash
+parses the entire script into memory before executing any of it.
+
+Also: `StandardOutput=append:` in the unit already sends stdout to
+`/var/log/ha-hub-update.log`, and every log line was *also* piped through
+`tee -a "$LOG"` — which is why every entry in that log appeared twice. The tee
+calls are gone.
