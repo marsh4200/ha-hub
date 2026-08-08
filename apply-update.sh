@@ -80,7 +80,7 @@ ok "Old volumes cleared"
 
 step "Refreshing watcher service"
 if [[ -f scripts/update-watcher.sh && -f scripts/ha-hub-update-watcher.service ]]; then
-  chmod +x scripts/update-watcher.sh
+  chmod +x scripts/*.sh 2>/dev/null || true
   cp scripts/ha-hub-update-watcher.service /etc/systemd/system/
   systemctl daemon-reload
   systemctl restart ha-hub-update-watcher 2>/dev/null || systemctl enable --now ha-hub-update-watcher

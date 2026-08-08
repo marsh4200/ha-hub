@@ -12,6 +12,7 @@ ok()   { echo "${C_GREEN}✓${C_OFF} $*"; }
 info "Pulling latest source"
 git fetch --all --quiet
 git reset --hard "@{u}" --quiet
+chmod +x scripts/*.sh 2>/dev/null || true
 ok "Source updated to $(git rev-parse --short HEAD)"
 
 # Auto-detect deployment mode

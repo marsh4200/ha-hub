@@ -6,15 +6,58 @@ set -Eeuo pipefail
 INSTALL_DIR="${HAHUB_DIR:-/opt/ha-hub}"
 LOG="/var/log/ha-hub-update.log"
 
-# Auto-detect the data volume
+log() { echo "[$(date -Iseconds)] $*" | tee -a "$LOG"; }
+
+# Port the app is published on — needed for the post-restart health check.
+# Read from .env so a non-default PORT doesn't make every update "fail".
+app_port() {
+  local p=""
+  [[ -f "$INSTALL_DIR/.env" ]] && p="$(grep -E '^PORT=' "$INSTALL_DIR/.env" | tail -n1 | cut -d= -f2- | tr -d '"'"'"' ' || true)"
+  echo "${p:-8080}"
+}
+
+# Locate the data volume.
+#
+# Previously this grepped every volume on the host for one ending in `_data`
+# and took the first hit. On a server running more than one Docker stack that
+# is a coin flip — it would happily latch onto some other project's volume,
+# find no flag file there, and sit idle forever while the portal showed
+# "Queued". So: ask the container itself, and only fall back to name matching
+# scoped to this project.
 detect_volume() {
-  local found
-  found="$(docker volume ls --format '{{.Name}}' | grep -E '_(ha-hub-)?data$|_update-flag$' | head -n 1 || true)"
-  if [[ -z "$found" ]]; then return 1; fi
+  local found=""
+
+  # 1. Ask the running app container what is actually mounted at /app/data.
+  local cid
+  cid="$(cd "$INSTALL_DIR" 2>/dev/null && docker compose ps -q app 2>/dev/null | head -n1 || true)"
+  [[ -z "$cid" ]] && cid="$(docker ps -q --filter 'name=ha-hub-app' | head -n1 || true)"
+  if [[ -n "$cid" ]]; then
+    found="$(docker inspect "$cid" --format \
+      '{{range .Mounts}}{{if and (eq .Type "volume") (eq .Destination "/app/data")}}{{.Name}}{{end}}{{end}}' \
+      2>/dev/null || true)"
+  fi
+
+  # 2. Fall back to a name match, but anchored to this project so another
+  #    stack's volume can never win.
+  if [[ -z "$found" ]]; then
+    found="$(docker volume ls --format '{{.Name}}' \
+      | grep -E '^ha[-_]hub[-_].*ha-hub-data$' | head -n1 || true)"
+  fi
+
+  # 3. Last resort — the old loose match, kept so an unusual project name
+  #    still works, but only after the precise methods have failed.
+  if [[ -z "$found" ]]; then
+    found="$(docker volume ls --format '{{.Name}}' \
+      | grep -E '_(ha-hub-)?data$|_update-flag$' | head -n1 || true)"
+  fi
+
+  [[ -z "$found" ]] && return 1
+
   VOLUME_NAME="$found"
   DATA_DIR="/var/lib/docker/volumes/${VOLUME_NAME}/_data"
   FLAG_PATH="${DATA_DIR}/update-requested"
   STATE_PATH="${DATA_DIR}/update-state.json"
+  return 0
 }
 
 # Write progress state the UI can poll
@@ -26,17 +69,25 @@ EOF
 }
 
 run_update() {
-  echo "[$(date -Iseconds)] Update requested" | tee -a "$LOG"
+  local branch="${UPDATE_BRANCH:-main}"
+  local port; port="$(app_port)"
+
+  log "Update requested (branch $branch, volume $VOLUME_NAME)"
   set_state running fetching 10 "Fetching latest code from GitHub"
 
   cd "$INSTALL_DIR"
 
   # Reset any local modifications so git pull never aborts
   git fetch --all 2>&1 | tee -a "$LOG" || true
-  git reset --hard origin/main 2>&1 | tee -a "$LOG" || {
+  git reset --hard "origin/${branch}" 2>&1 | tee -a "$LOG" || {
     set_state error fetching 10 "git reset failed — check log"
     return 1
   }
+
+  # Restore the executable bit. GitHub web uploads commit mode 100644, so the
+  # reset above silently strips +x from every script — including this one, which
+  # is how the watcher ends up dead with status=203/EXEC after an update.
+  chmod +x scripts/*.sh 2>/dev/null || true
 
   local NEW_SHA
   NEW_SHA="$(git rev-parse --short HEAD)"
@@ -53,11 +104,14 @@ run_update() {
     return 1
   fi
 
+  # The volume can be recreated by `up`, so re-resolve before writing state.
+  detect_volume || true
+
   set_state running verifying 95 "Waiting for API to come back"
   for i in $(seq 1 60); do
-    if curl -fsS http://localhost:8080/api/health >/dev/null 2>&1; then
+    if curl -fsS "http://localhost:${port}/api/health" >/dev/null 2>&1; then
       set_state success done 100 "Update complete — now at $NEW_SHA"
-      echo "[$(date -Iseconds)] Update complete ($NEW_SHA)" | tee -a "$LOG"
+      log "Update complete ($NEW_SHA)"
       return 0
     fi
     sleep 2
@@ -67,11 +121,22 @@ run_update() {
 }
 
 # Main loop
-echo "[$(date -Iseconds)] watcher started" | tee -a "$LOG"
+log "watcher started (install dir $INSTALL_DIR)"
+warned=0
 while true; do
   if ! detect_volume; then
+    # Say so once rather than failing silently forever — a silent watcher is
+    # exactly what makes the portal sit on "Queued" with no explanation.
+    if [[ "$warned" -eq 0 ]]; then
+      log "WARNING: could not find the ha-hub data volume — is the stack running? Retrying every 10s."
+      warned=1
+    fi
     sleep 10
     continue
+  fi
+  if [[ "$warned" -eq 1 ]]; then
+    log "data volume found: $VOLUME_NAME"
+    warned=0
   fi
   if [[ -f "$FLAG_PATH" ]]; then
     rm -f "$FLAG_PATH"

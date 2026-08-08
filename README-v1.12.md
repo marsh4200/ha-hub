@@ -90,3 +90,52 @@ cd /opt/ha-hub && ./scripts/update.sh
 ```
 
 Or Settings → Check for updates → Update.
+
+---
+
+## Also in 1.12: update watcher fixes
+
+**The watcher could latch onto the wrong Docker volume.** `detect_volume` grepped
+every volume on the host for one ending in `_data` and took the first match. On a
+server running more than one Docker stack that is a coin flip — it would pick some
+other project's volume, find no flag file there, and sit idle forever while the
+portal showed *"Queued — waiting for watcher to pick up"* at 0%.
+
+It now asks the running `app` container what is actually mounted at `/app/data`,
+falls back to a project-anchored name match, and only then to the old loose match.
+
+**Other watcher fixes:**
+
+- The health check read a hardcoded port 8080. It now reads `PORT` from `.env`, so
+  a non-default port no longer makes every update report failure at 95%.
+- `git reset --hard origin/main` ignored `UPDATE_BRANCH`. It now honours it.
+- A watcher that cannot find its volume logs a warning once instead of failing
+  silently, which is what made this hard to diagnose.
+- The volume is re-resolved after `docker compose up`, in case it was recreated.
+
+**New: `scripts/force-update.sh`** — updates from the host, bypassing the watcher,
+and clears any stuck state. Needed because `requestUpdate()` refuses to queue while
+status is `requested` or `running`, so a half-finished update locks the in-portal
+button out permanently until the state file is removed.
+
+```bash
+sudo /opt/ha-hub/scripts/force-update.sh
+```
+
+### The watcher died with status=203/EXEC
+
+The unit file used a bare `ExecStart=/opt/ha-hub/scripts/update-watcher.sh`.
+
+Files uploaded to GitHub through the web UI are committed mode `100644`, so the
+executable bit does not survive a `git reset --hard`. The very first successful
+in-portal update therefore stripped `+x` from the watcher, systemd failed to exec
+it on the next restart, and every subsequent update request sat at
+*"Queued — waiting for watcher to pick up"* — with the failure recorded only in
+`systemctl status`, not in the update log the portal shows.
+
+Two changes so it cannot recur:
+
+- The unit now runs `ExecStart=/bin/bash /opt/ha-hub/scripts/update-watcher.sh`,
+  making the executable bit irrelevant.
+- `update-watcher.sh`, `update.sh` and `apply-update.sh` all `chmod +x scripts/*.sh`
+  immediately after the git reset.

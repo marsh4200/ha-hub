@@ -5,7 +5,14 @@ Requires=docker.service
 
 [Service]
 Type=simple
-ExecStart=/opt/ha-hub/scripts/update-watcher.sh
+# Invoked through bash on purpose.
+#
+# Files uploaded to GitHub through the web UI are committed mode 100644, so the
+# executable bit does not survive a `git reset --hard`. With a bare ExecStart
+# path systemd then fails with status=203/EXEC on the next update, the watcher
+# dies, and the portal sits on "Queued — waiting for watcher to pick up" with no
+# error anywhere. Calling bash explicitly makes the exec bit irrelevant.
+ExecStart=/bin/bash /opt/ha-hub/scripts/update-watcher.sh
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/ha-hub-update.log
