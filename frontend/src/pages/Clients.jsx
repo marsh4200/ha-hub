@@ -8,7 +8,7 @@ import StatusBadge from '../components/StatusBadge.jsx';
 import VersionChip from '../components/VersionChip.jsx';
 import BackupCard from '../components/BackupCard.jsx';
 import HaTokenField from '../components/HaTokenField.jsx';
-import { relTime, num, hostOf, triage, triageReasons, RAIL } from '../lib/format';
+import { relTime, num, hostOf, triage, faults, notes, RAIL } from '../lib/format';
 
 const EMPTY = { name: '', url: '', notes: '', group: '', tags: '', haToken: '' };
 
@@ -121,7 +121,8 @@ export default function Clients() {
         {clients.map(c => {
           const expanded = expandedId === c.id;
           const t = triage(c);
-          const reasons = triageReasons(c);
+          const problems = faults(c);   // red / amber — someone must act
+          const remarks  = notes(c);    // cyan — worth knowing, nothing to fix
           return (
             <div key={c.id} className={`card rail ${RAIL[t]} overflow-hidden`}>
               <div className="flex items-center gap-3 p-3 pl-4 hover:bg-bg-raised/40 transition-colors">
@@ -181,9 +182,12 @@ export default function Clients() {
                 </div>
               </div>
 
-              {reasons.length > 0 && (
+              {(problems.length > 0 || remarks.length > 0) && (
                 <div className="px-4 pb-2.5 pl-11 flex flex-wrap gap-1.5">
-                  {reasons.map(r => <span key={r} className={t === 'down' ? 'chip-down' : 'chip-warn'}>{r}</span>)}
+                  {problems.map(r => (
+                    <span key={r} className={t === 'down' ? 'chip-down' : 'chip-warn'}>{r}</span>
+                  ))}
+                  {remarks.map(r => <span key={r} className="chip-info">{r}</span>)}
                 </div>
               )}
 
@@ -192,7 +196,11 @@ export default function Clients() {
                   {c.hasHaToken && c.entityCount != null && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <Stat label="Entities" value={num(c.entityCount)} />
-                      <Stat label="Unavailable" value={num(c.unavailableCount)} tone={c.unavailableCount > 0 ? 'warn' : null} />
+                      <Stat
+                        label="Unavailable"
+                        value={num(c.unavailableCount)}
+                        hint={c.unavailableCount > 0 ? 'normal on most sites' : null}
+                      />
                       <Stat label="Integrations" value={num(c.integrationCount)} />
                       <Stat label="Automations" value={num(c.automationCount)} />
                     </div>
@@ -206,7 +214,7 @@ export default function Clients() {
                           <div key={u.entityId} className="flex items-center justify-between gap-3 text-xs bg-bg-raised border border-line rounded-lg px-2.5 py-1.5">
                             <span className="truncate text-slate-300">{u.title}</span>
                             <span className="font-mono tnum text-slate-500 shrink-0">
-                              {u.installed} <span className="text-warn">→ {u.latest}</span>
+                              {u.installed} <span className="text-brand">→ {u.latest}</span>
                             </span>
                           </div>
                         ))}
@@ -311,11 +319,12 @@ export default function Clients() {
   );
 }
 
-function Stat({ label, value, tone }) {
+function Stat({ label, value, tone, hint }) {
   return (
     <div className="bg-bg-raised border border-line rounded-lg px-3 py-2">
       <div className="text-2xs uppercase tracking-wide text-slate-600">{label}</div>
       <div className={`text-lg font-mono tnum ${tone === 'warn' ? 'text-warn' : 'text-slate-200'}`}>{value}</div>
+      {hint && <div className="text-2xs text-slate-600 leading-tight mt-0.5">{hint}</div>}
     </div>
   );
 }

@@ -8,8 +8,10 @@ A self-hosted central dashboard for managing multiple remote Home Assistant inst
   token — version, pending updates, entity counts, unavailable entities,
   integrations and automations. Token stored AES-256-GCM encrypted, never sent to
   the browser. See [README-v1.11.md](README-v1.11.md).
-- 🎯 Dashboard sorts itself by what needs attention — offline, updates pending,
-  entities unavailable, token rejected
+- 🎯 Dashboard sorts itself into three bands — **needs attention** (offline,
+  token rejected, HA not running), **update available** (online and healthy),
+  and **all good**. Pending updates and unavailable entities are treated as
+  information, not faults. See [README-v1.12.md](README-v1.12.md).
 - 🔐 First-run admin setup wizard
 - 👥 Multi-user with role-based permissions (admin / user)
 - 🏠 Add / edit / delete / tag / group Home Assistant sites

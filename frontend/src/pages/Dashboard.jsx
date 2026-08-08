@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Search, AlertTriangle, RefreshCw, Inbox } from 'lucide-react';
+import { Search, AlertTriangle, RefreshCw, Inbox, ArrowUpCircle } from 'lucide-react';
 import api from '../services/api';
 import { useSocket } from '../hooks/useSocket';
 import { useNow } from '../hooks/useNow';
 import { useAuth } from '../context/AuthContext.jsx';
 import ClientCard from '../components/ClientCard.jsx';
 import FleetBar from '../components/FleetBar.jsx';
-import { triage } from '../lib/format';
+import { triage, needsAction } from '../lib/format';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -46,8 +46,11 @@ export default function Dashboard() {
     }
   });
 
-  const attentionCount = useMemo(
-    () => clients.filter(c => ['down', 'warn'].includes(triage(c))).length,
+  // Two independent counts. "Attention" means broken; "updates" means there is
+  // a newer version waiting. A site can be neither, either, or both.
+  const attentionCount = useMemo(() => clients.filter(needsAction).length, [clients]);
+  const updateCount = useMemo(
+    () => clients.filter(c => triage(c) === 'info' && c.updateAvailable).length,
     [clients]
   );
 
@@ -55,7 +58,9 @@ export default function Dashboard() {
     const term = q.trim().toLowerCase();
     return clients.filter(c => {
       if (filter === 'attention') {
-        if (!['down', 'warn'].includes(triage(c))) return false;
+        if (!needsAction(c)) return false;
+      } else if (filter === 'updates') {
+        if (!(c.updateAvailable && !needsAction(c))) return false;
       } else if (filter !== 'all' && (c.status || '').toLowerCase() !== filter) {
         return false;
       }
@@ -72,17 +77,18 @@ export default function Dashboard() {
     });
   }, [clients, q, filter]);
 
-  // Triage ordering: broken first, then waiting, then healthy. Within a band,
-  // alphabetical so a site keeps a stable position between polls.
-  const { needsAttention, healthy } = useMemo(() => {
-    const rank = { down: 0, warn: 1, idle: 2, live: 3 };
+  // Three bands, top to bottom: broken, then online-with-news, then quiet.
+  // Within a band, alphabetical so a site keeps a stable position between polls.
+  const { needsAttention, updatable, healthy } = useMemo(() => {
+    const rank = { down: 0, warn: 1, info: 2, idle: 3, live: 4 };
     const sorted = [...filtered].sort((a, b) => {
       const d = rank[triage(a)] - rank[triage(b)];
       return d !== 0 ? d : a.name.localeCompare(b.name);
     });
     return {
-      needsAttention: sorted.filter(c => ['down', 'warn'].includes(triage(c))),
-      healthy: sorted.filter(c => !['down', 'warn'].includes(triage(c))),
+      needsAttention: sorted.filter(c => needsAction(c)),
+      updatable: sorted.filter(c => !needsAction(c) && triage(c) === 'info'),
+      healthy: sorted.filter(c => !needsAction(c) && triage(c) !== 'info'),
     };
   }, [filtered]);
 
@@ -139,7 +145,13 @@ export default function Dashboard() {
         </button>
       </header>
 
-      <FleetBar stats={stats} attention={attentionCount} filter={filter} onFilter={setFilter} />
+      <FleetBar
+        stats={stats}
+        attention={attentionCount}
+        updates={updateCount}
+        filter={filter}
+        onFilter={setFilter}
+      />
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none" size={16} />
@@ -172,9 +184,23 @@ export default function Dashboard() {
             </section>
           )}
 
+          {updatable.length > 0 && (
+            <section>
+              <SectionHead
+                icon={<ArrowUpCircle size={13} className="text-brand" />}
+                label="Update available"
+                count={updatable.length}
+                note="online and healthy"
+              />
+              <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {updatable.map(c => <ClientCard key={c.id} client={c} {...cardProps} />)}
+              </div>
+            </section>
+          )}
+
           {healthy.length > 0 && (
             <section>
-              {needsAttention.length > 0 && (
+              {(needsAttention.length > 0 || updatable.length > 0) && (
                 <SectionHead
                   icon={<span className="dot dot-online" />}
                   label="All good"
@@ -192,12 +218,13 @@ export default function Dashboard() {
   );
 }
 
-function SectionHead({ icon, label, count }) {
+function SectionHead({ icon, label, count, note }) {
   return (
     <div className="flex items-center gap-2 mb-2.5">
       {icon}
       <span className="eyebrow">{label}</span>
       <span className="text-2xs text-slate-600 tnum">{count}</span>
+      {note && <span className="text-2xs text-slate-600 hidden sm:inline">· {note}</span>}
       <div className="flex-1 h-px bg-line" />
     </div>
   );

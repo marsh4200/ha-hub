@@ -1,4 +1,4 @@
-import { ExternalLink, Download, RefreshCw, AlertTriangle, KeyRound, Boxes, Cpu, Zap } from 'lucide-react';
+import { ExternalLink, Download, RefreshCw, KeyRound, Boxes, Cpu, Zap } from 'lucide-react';
 import StatusBadge from './StatusBadge.jsx';
 import VersionChip from './VersionChip.jsx';
 import { relTime, num, hostOf, triage, RAIL } from '../lib/format';
@@ -14,6 +14,15 @@ export default function ClientCard({ client: c, now, onDownloadBackup, onRefresh
   const t = triage(c);
   const linked = c.hasHaToken;
   const tokenBad = c.haTokenStatus === 'UNAUTHORIZED' || c.haTokenStatus === 'DECRYPT_FAILED';
+
+  // STARTING is transient and resolves itself, so it reads as information.
+  // Anything else non-RUNNING is a fault and reads as one.
+  const haState = (c.haState || '').toUpperCase();
+  const stateNote = !haState || haState === 'RUNNING'
+    ? null
+    : haState === 'STARTING'
+      ? { cls: 'chip-info', text: 'Starting up' }
+      : { cls: 'chip-warn', text: `HA is ${haState.toLowerCase().replace(/_/g, ' ')}` };
 
   return (
     <div className={`card rail ${RAIL[t]} animate-riseIn hover:border-line-bright transition-colors group`}>
@@ -42,7 +51,13 @@ export default function ClientCard({ client: c, now, onDownloadBackup, onRefresh
           <StatusBadge status={c.status} />
         </div>
 
-        {/* Version + attention reasons */}
+        {/* Version, then genuine faults only.
+
+            Unavailable entities are deliberately absent here. Every real
+            installation carries a few — a bulb off at the wall, a device that
+            left with its owner, an integration whose cloud service shut down —
+            and putting that on the card trains you to ignore the card. The
+            count still lives in the site's detail panel for when it matters. */}
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <VersionChip client={c} />
           {tokenBad && (
@@ -51,15 +66,7 @@ export default function ClientCard({ client: c, now, onDownloadBackup, onRefresh
               {c.haTokenStatus === 'UNAUTHORIZED' ? 'Token rejected' : 'Token unreadable'}
             </span>
           )}
-          {c.unavailableCount > 0 && (
-            <span className="chip-warn">
-              <AlertTriangle size={11} />
-              {num(c.unavailableCount)} unavailable
-            </span>
-          )}
-          {c.haState && c.haState !== 'RUNNING' && (
-            <span className="chip-warn">{c.haState.toLowerCase()}</span>
-          )}
+          {stateNote && <span className={stateNote.cls}>{stateNote.text}</span>}
         </div>
 
         {/* Metrics — only when a token is linked, otherwise there's nothing to show */}

@@ -91,6 +91,9 @@ body {
   .chip-down    { @apply chip bg-down/10 border-down/25 text-down; }
   .chip-warn    { @apply chip bg-warn/10 border-warn/25 text-warn; }
   .chip-brand   { @apply chip bg-brand/10 border-brand/25 text-brand; }
+  /* Informational, not alarming. Used for "update available" and friends —
+     cyan reads as "here is a fact", amber reads as "you have a problem". */
+  .chip-info    { @apply chip bg-brand/10 border-brand/25 text-brand; }
 
   .eyebrow {
     @apply text-2xs font-semibold uppercase tracking-[0.14em] text-slate-500;
@@ -126,6 +129,7 @@ body {
 .rail-live::before { background: linear-gradient(180deg, #22C55E, #15803D); }
 .rail-down::before { background: linear-gradient(180deg, #FB7185, #BE123C); }
 .rail-warn::before { background: linear-gradient(180deg, #FBBF24, #B45309); }
+.rail-info::before { background: linear-gradient(180deg, #03A9F4, #0369A1); }
 .rail-idle::before { background: linear-gradient(180deg, #475569, #334155); }
 
 /* ── Skeleton ─────────────────────────────────────────────────────────── */

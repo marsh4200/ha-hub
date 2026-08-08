@@ -3,13 +3,17 @@ import { num } from '../lib/format';
 /**
  * One bar for the whole fleet. Proportion beats four identical stat boxes —
  * you read "mostly green with a red sliver" before you read any number.
+ *
+ * "Needs attention" and "Updates" are separate counts on purpose. A site with a
+ * pending update is not a site with a problem, and merging the two makes the
+ * attention number meaningless within a week of running a real fleet.
  */
-export default function FleetBar({ stats, attention, filter, onFilter }) {
+export default function FleetBar({ stats, attention, updates, filter, onFilter }) {
   const total = stats.total || 0;
   const segments = [
-    { key: 'online',  label: 'Live',     value: stats.online  || 0, color: '#22C55E' },
-    { key: 'offline', label: 'Offline',  value: stats.offline || 0, color: '#FB7185' },
-    { key: 'unknown', label: 'Unchecked',value: stats.unknown || 0, color: '#475569' },
+    { key: 'online',  label: 'Live',      value: stats.online  || 0, color: '#22C55E' },
+    { key: 'offline', label: 'Offline',   value: stats.offline || 0, color: '#FB7185' },
+    { key: 'unknown', label: 'Unchecked', value: stats.unknown || 0, color: '#475569' },
   ];
 
   return (
@@ -25,10 +29,17 @@ export default function FleetBar({ stats, attention, filter, onFilter }) {
               <span className="text-slate-200 font-medium">{num(stats.linked)}</span> linked
             </span>
           )}
-          {attention > 0 && (
+          {updates > 0 && (
+            <span className="tnum text-brand">
+              <span className="font-medium">{num(updates)}</span> to update
+            </span>
+          )}
+          {attention > 0 ? (
             <span className="tnum text-warn">
               <span className="font-medium">{num(attention)}</span> need attention
             </span>
+          ) : total > 0 && (
+            <span className="tnum text-live">All healthy</span>
           )}
         </div>
       </div>
@@ -60,6 +71,13 @@ export default function FleetBar({ stats, attention, filter, onFilter }) {
             color={s.color}
           />
         ))}
+        <FilterPill
+          active={filter === 'updates'}
+          onClick={() => onFilter('updates')}
+          label="Update available"
+          count={updates}
+          color="#03A9F4"
+        />
         <FilterPill
           active={filter === 'attention'}
           onClick={() => onFilter('attention')}
