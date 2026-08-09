@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "smoke": "npm install --no-save --no-audit --no-fund jsdom && vite build -c smoketest/vite.smoke.config.js --ssr smoketest/interact.jsx --outDir smoketest/out && node smoketest/out/interact.js",
+    "smoke:components": "vite build --ssr smoketest/components.jsx --outDir smoketest/out && node smoketest/out/components.js"
   },
   "dependencies": {
     "axios": "^1.7.7",

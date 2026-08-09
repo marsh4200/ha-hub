@@ -1,34 +1,48 @@
-import { useIdleLogout } from '../hooks/useIdleLogout';
 import { Clock } from 'lucide-react';
+import { useIdleLogout } from '../hooks/useIdleLogout';
+import { Modal, Button } from './ui';
 
-// Global popup that shows the inactivity warning + countdown.
-// Pure presentational — hook handles the timing logic.
+/**
+ * Inactivity warning.
+ *
+ * Presentational only — the hook owns all the timing. The countdown is the
+ * loudest thing in the dialog because it is the only part that changes, and
+ * the whole overlay stays dismissible by moving the mouse, which is what most
+ * people will do instinctively before reading anything.
+ */
 export default function IdleWarning() {
   const { warningSecondsLeft, stayLoggedIn } = useIdleLogout();
   if (warningSecondsLeft == null) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/70 grid place-items-center p-4 animate-fadein"
-      onClick={stayLoggedIn}
+    <Modal
+      open
+      size="sm"
+      layer="z-[160]"
+      icon={Clock}
+      tone="danger"
+      title="You're about to be signed out"
+      onClose={stayLoggedIn}
+      footer={
+        <Button variant="primary" fullWidth onClick={stayLoggedIn}>
+          Stay signed in
+        </Button>
+      }
     >
-      <div
-        className="card p-6 max-w-sm w-full text-center"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-warn/12 grid place-items-center">
-          <Clock className="text-warn" size={22}/>
-        </div>
-        <h3 className="font-semibold mb-1">You're about to be logged out</h3>
-        <p className="text-sm text-slate-400 mb-4">
-          Due to inactivity, you'll be signed out in
-          {' '}<span className="font-mono text-warn text-lg">{warningSecondsLeft}s</span>
+      <div className="text-center">
+        <p
+          className="font-display text-5xl font-semibold leading-none tnum text-warn"
+          role="timer"
+          aria-live="assertive"
+        >
+          {warningSecondsLeft}
+          <span className="text-2xl text-fg-faint">s</span>
         </p>
-        <button className="btn-primary w-full justify-center" onClick={stayLoggedIn}>
-          Stay logged in
-        </button>
-        <p className="text-xs text-slate-500 mt-3">Click anywhere or move your mouse to stay.</p>
+        <p className="mt-4 text-sm leading-relaxed text-fg-muted">
+          HA-Hub signs you out automatically after a period of inactivity. Move the mouse, press a
+          key or use the button below to stay signed in.
+        </p>
       </div>
-    </div>
+    </Modal>
   );
 }

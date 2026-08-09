@@ -3,11 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#070A10" />
-    <meta name="description" content="Live status for your Home Assistant sites." />
+    <meta name="theme-color" content="#05080E" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="HA-Hub — live status, updates and backups for a fleet of Home Assistant installations." />
     <title>HA-Hub</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Loaded here rather than via an @import in CSS: an @import blocks the
+         stylesheet itself from parsing, which delayed first paint of the shell. -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    />
   </head>
   <body>
     <div id="root"></div>

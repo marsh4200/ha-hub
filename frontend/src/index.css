@@ -1,161 +1,213 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── Base ─────────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   HA-Hub — base layer
 
-html, body, #root { height: 100%; }
+   Three type roles, used consistently:
+     display (Space Grotesk) — page titles, numbers you are meant to notice
+     sans    (Inter)         — every piece of interface text
+     mono    (JetBrains)     — versions, hostnames, IDs, timestamps, counts
+   ══════════════════════════════════════════════════════════════════════════ */
 
-body {
-  background:
-    radial-gradient(1100px 520px at 12% -8%, rgba(3, 169, 244, 0.10), transparent 62%),
-    radial-gradient(760px 400px at 92% 4%, rgba(3, 169, 244, 0.05), transparent 60%),
-    #070A10;
-  background-attachment: fixed;
-  color: #E2E8F0;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+@layer base {
+  html, body, #root { height: 100%; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    /* A single, very restrained light source from the top-left of the shell.
+       No gradients on individual components — the room is lit once. */
+    background:
+      radial-gradient(1200px 600px at 8% -12%, rgba(56, 189, 248, 0.07), transparent 60%),
+      #0A1018;
+    background-attachment: fixed;
+    color: theme('colors.fg.DEFAULT');
+    font-family: theme('fontFamily.sans');
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Headings carry the display face; body text never does. */
+  h1, h2, h3, h4 { font-family: theme('fontFamily.display'); letter-spacing: -0.015em; }
+
+  ::selection { background: rgba(56, 189, 248, 0.28); }
+
+  /* One focus treatment for the whole app. Visible on every surface. */
+  :focus-visible {
+    outline: 2px solid theme('colors.brand.DEFAULT');
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  /* Elements that draw their own ring don't need the outline as well. */
+  .focus-ring:focus-visible { outline: none; box-shadow: theme('boxShadow.focus'); }
+
+  * { scrollbar-width: thin; scrollbar-color: #2A3747 transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb { background: #24313f; border-radius: 8px; border: 3px solid transparent; background-clip: content-box; }
+  *::-webkit-scrollbar-thumb:hover { background: #2F3F52; background-clip: content-box; }
+  *::-webkit-scrollbar-track { background: transparent; }
+
+  /* Native form controls inherit the dark surface rather than fighting it. */
+  select option { background: #16202D; color: #E4EBF4; }
+
+  input[type="checkbox"] { accent-color: theme('colors.brand.DEFAULT'); }
 }
 
-/* Version numbers, entity counts and latencies all need to line up column to
-   column, so every numeric readout is monospaced with tabular figures. */
-.tnum { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
-
-::selection { background: rgba(3, 169, 244, 0.3); }
-
-*:focus-visible {
-  outline: 2px solid #03A9F4;
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* Thin scrollbars that don't fight the dark surface */
-* { scrollbar-width: thin; scrollbar-color: #2B3A4F transparent; }
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-thumb { background: #2B3A4F; border-radius: 8px; }
-*::-webkit-scrollbar-track { background: transparent; }
-
+/* ── Motion ──────────────────────────────────────────────────────────────
+   Everything animated is decoration on top of a static, correct layout, so
+   removing it entirely is always safe. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-/* ── Components ───────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   Component layer
+
+   Deliberately small. Anything with state, variants or an accessibility
+   contract lives in src/components/ui as a React component instead — these
+   are only the primitives that raw markup still needs.
+   ══════════════════════════════════════════════════════════════════════════ */
 
 @layer components {
+  /* Numbers that sit in columns must line up between polls. */
+  .tnum { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+
+  /* Small capitalised label above a heading or beside a section rule. */
+  .eyebrow {
+    @apply text-2xs font-semibold uppercase tracking-[0.12em] text-fg-faint;
+  }
+
+  /* ── Form primitives ──────────────────────────────────────────────── */
+  .input {
+    @apply w-full bg-ink/70 border border-line rounded-lg px-3 py-2.5 text-sm text-fg
+           placeholder:text-fg-ghost transition-colors duration-150
+           hover:border-line-strong
+           focus:outline-none focus:border-brand/60 focus:ring-2 focus:ring-brand/20
+           disabled:opacity-45 disabled:cursor-not-allowed;
+  }
+  select.input {
+    @apply appearance-none pr-9 cursor-pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7C92' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.65rem center;
+  }
+  .label { @apply block text-2xs font-semibold uppercase tracking-wider text-fg-faint mb-1.5; }
+  .hint  { @apply text-xs text-fg-faint mt-1.5 leading-relaxed; }
+
+  /* ── Legacy button classes ─────────────────────────────────────────
+     The <Button> component is the supported API. These remain so that any
+     surface not yet migrated still renders correctly rather than unstyled. */
   .btn {
     @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium
-           transition-all duration-150 active:scale-[0.98] disabled:opacity-40
+           transition-all duration-150 active:scale-[0.985] disabled:opacity-45
            disabled:cursor-not-allowed disabled:active:scale-100 whitespace-nowrap;
   }
-  .btn-primary {
-    @apply btn text-white;
-    background: linear-gradient(180deg, #0AB4FF 0%, #0288D1 100%);
-    box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset, 0 6px 18px -8px rgba(3,169,244,0.7);
-  }
-  .btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
-  .btn-secondary {
-    @apply btn bg-bg-raised border border-line hover:border-line-bright hover:bg-bg-card text-slate-200;
-  }
-  .btn-ghost {
-    @apply btn text-slate-400 hover:text-slate-100 hover:bg-bg-raised;
-  }
-  .btn-danger {
-    @apply btn bg-down/15 border border-down/30 text-down hover:bg-down/25;
-  }
-  .btn-icon { @apply !px-2 !py-2; }
-
-  .card {
-    @apply bg-bg-card border border-line rounded-xl shadow-panel;
-  }
-
-  .input {
-    @apply w-full bg-bg/70 border border-line rounded-lg px-3 py-2.5 text-sm text-slate-100
-           placeholder:text-slate-600 transition-colors
-           focus:outline-none focus:border-brand/70 focus:ring-2 focus:ring-brand/20;
-  }
-  .label { @apply block text-2xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5; }
-  .hint  { @apply text-xs text-slate-500 mt-1.5 leading-relaxed; }
-
-  .chip {
-    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium
-           border tnum;
-  }
-  .chip-neutral { @apply chip bg-bg-raised border-line text-slate-400; }
-  .chip-live    { @apply chip bg-live/10 border-live/25 text-live; }
-  .chip-down    { @apply chip bg-down/10 border-down/25 text-down; }
-  .chip-warn    { @apply chip bg-warn/10 border-warn/25 text-warn; }
-  .chip-brand   { @apply chip bg-brand/10 border-brand/25 text-brand; }
-  /* Informational, not alarming. Used for "update available" and friends —
-     cyan reads as "here is a fact", amber reads as "you have a problem". */
-  .chip-info    { @apply chip bg-brand/10 border-brand/25 text-brand; }
-
-  .eyebrow {
-    @apply text-2xs font-semibold uppercase tracking-[0.14em] text-slate-500;
-  }
+  .btn-primary   { @apply btn bg-brand-dark text-ink font-semibold hover:bg-brand; }
+  .btn-secondary { @apply btn bg-raised border border-line text-fg hover:border-line-strong hover:bg-float; }
+  .btn-ghost     { @apply btn text-fg-muted hover:text-fg hover:bg-raised; }
+  .btn-danger    { @apply btn bg-down/12 border border-down/30 text-down hover:bg-down/20; }
+  .btn-icon      { @apply !px-2 !py-2; }
+  .card          { @apply bg-panel border border-line rounded-xl shadow-e1; }
+  .chip          { @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-medium border tnum; }
+  .chip-neutral  { @apply chip bg-raised border-line text-fg-muted; }
+  .chip-live     { @apply chip bg-live/10 border-live/25 text-live; }
+  .chip-down     { @apply chip bg-down/10 border-down/25 text-down; }
+  .chip-warn     { @apply chip bg-warn/10 border-warn/25 text-warn; }
+  .chip-brand,
+  .chip-info     { @apply chip bg-brand/10 border-brand/25 text-brand; }
 }
 
-/* ── Status dot ───────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   Status rail — the product's signature
 
-.dot { width: 7px; height: 7px; border-radius: 9999px; display: inline-block; flex: none; }
-.dot-online  { background: #22C55E; }
-.dot-online.dot-pulse { animation: pulseRing 2.4s ease-out infinite; }
-.dot-offline { background: #FB7185; box-shadow: 0 0 0 3px rgba(251,113,133,0.15); }
-.dot-unknown { background: #64748B; box-shadow: 0 0 0 3px rgba(100,116,139,0.12); }
+   Every site, whether drawn as a card or a table row, carries its health on
+   its left edge. Reading the rail down the page is the fastest possible
+   answer to "what needs me?", and it works identically in both layouts.
+   ══════════════════════════════════════════════════════════════════════════ */
 
-@keyframes pulseRing {
-  0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
-  70%  { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
-  100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
-}
-
-/* ── Client card status rail ──────────────────────────────────────────── */
-/* The left edge of every card carries the site's health. Scanning the rail
-   down the page is the fastest read of the whole fleet. */
-
-.rail { position: relative; overflow: hidden; }
+.rail { position: relative; }
 .rail::before {
   content: '';
   position: absolute;
   left: 0; top: 0; bottom: 0;
   width: 3px;
-  border-radius: 12px 0 0 12px;
+  border-radius: inherit;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  background: #2A3747;
 }
-.rail-live::before { background: linear-gradient(180deg, #22C55E, #15803D); }
-.rail-down::before { background: linear-gradient(180deg, #FB7185, #BE123C); }
-.rail-warn::before { background: linear-gradient(180deg, #FBBF24, #B45309); }
-.rail-info::before { background: linear-gradient(180deg, #03A9F4, #0369A1); }
-.rail-idle::before { background: linear-gradient(180deg, #475569, #334155); }
+.rail-live::before { background: linear-gradient(180deg, #34D399, #059669); }
+.rail-down::before { background: linear-gradient(180deg, #FB7185, #E11D48); }
+.rail-warn::before { background: linear-gradient(180deg, #FBBF24, #D97706); }
+.rail-info::before { background: linear-gradient(180deg, #38BDF8, #0284C7); }
+.rail-idle::before { background: linear-gradient(180deg, #64748B, #3F4C5F); }
 
-/* ── Skeleton ─────────────────────────────────────────────────────────── */
+/* ── Status dot ─────────────────────────────────────────────────────────── */
+
+.dot { width: 7px; height: 7px; border-radius: 9999px; display: inline-block; flex: none; }
+.dot-online  { background: #34D399; }
+.dot-online.dot-pulse { animation: pulseRing 2.4s ease-out infinite; }
+.dot-offline { background: #FB7185; box-shadow: 0 0 0 3px rgba(251,113,133,0.14); }
+.dot-unknown { background: #64748B; box-shadow: 0 0 0 3px rgba(100,116,139,0.12); }
+.dot-warn    { background: #FBBF24; box-shadow: 0 0 0 3px rgba(251,191,36,0.14); }
+
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0 0 rgba(52,211,153,0.5); }
+  70%  { box-shadow: 0 0 0 5px rgba(52,211,153,0); }
+  100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+}
+
+/* ── Skeleton ───────────────────────────────────────────────────────────── */
 
 .skeleton {
   position: relative;
   overflow: hidden;
-  background: #16212F;
+  background: #16202D;
   border-radius: 6px;
 }
 .skeleton::after {
   content: '';
   position: absolute; inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.045), transparent);
   animation: shimmer 1.6s infinite;
 }
 @keyframes shimmer { 100% { transform: translateX(100%); } }
 
-/* ── Legacy animation names still referenced by IdleWarning ───────────── */
+/* ── Layout helpers ─────────────────────────────────────────────────────── */
 
-@keyframes fadein  { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes fadeout { from { opacity: 1; } to { opacity: 0; } }
-.animate-fadein  { animation: fadein 0.4s ease-out; }
-.animate-fadeout { animation: fadeout 0.6s ease-out forwards; }
+/* Clears the mobile bottom navigation plus the home indicator. */
+.pb-safe { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem); }
+@media (min-width: 1024px) { .pb-safe { padding-bottom: 3rem; } }
 
-/* Safe area for the mobile bottom nav */
-.pb-safe { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4.75rem); }
-@media (min-width: 1024px) { .pb-safe { padding-bottom: 2rem; } }
+/* Locks background scrolling while a dialog is open. */
+body.overflow-hidden { overflow: hidden; }
+
+/* Staggered entrance for lists — capped so a 200-site fleet doesn't crawl in. */
+.stagger > * { animation: riseIn .3s cubic-bezier(.2,.7,.3,1) both; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 25ms; }
+.stagger > *:nth-child(3) { animation-delay: 50ms; }
+.stagger > *:nth-child(4) { animation-delay: 75ms; }
+.stagger > *:nth-child(5) { animation-delay: 100ms; }
+.stagger > *:nth-child(n+6) { animation-delay: 120ms; }
+
+@keyframes riseIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes fadein { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.animate-fadein { animation: fadein 0.3s ease-out; }
+
+/* A rail hung off a table cell rather than the row: `position: relative` on a
+   <tr> is supported but historically inconsistent, and the cell stretches to
+   full row height anyway, so the result is identical and always paints. */
+td.rail { position: relative; }
+td.rail::before { border-radius: 0; }

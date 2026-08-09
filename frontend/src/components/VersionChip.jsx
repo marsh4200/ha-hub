@@ -1,4 +1,5 @@
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import { Badge } from './ui/Badge';
 
 /**
  * Home Assistant version.
@@ -7,36 +8,38 @@ import { ArrowUpRight } from 'lucide-react';
  * amber: an available update is news, not a fault. The site is still online and
  * still working — it just has somewhere to go next.
  */
-export default function VersionChip({ client }) {
-  const { haVersion, latestVersion, updateAvailable, pendingUpdates } = client;
+export default function VersionChip({ client, size = 'md' }) {
+  const { haVersion, latestVersion, updateAvailable, pendingUpdates } = client || {};
 
   if (!haVersion) {
-    return <span className="chip-neutral font-mono">version unknown</span>;
+    return <Badge tone="neutral" size={size} mono>no version</Badge>;
   }
+
+  const many = pendingUpdates > 1;
 
   if (updateAvailable && latestVersion && latestVersion !== haVersion) {
     return (
-      <span
-        className="chip-info font-mono"
-        title={pendingUpdates > 1 ? `${pendingUpdates} updates available` : 'Update available'}
+      <Badge
+        tone="brand"
+        size={size}
+        mono
+        title={many ? `${pendingUpdates} updates available` : `Update available: ${haVersion} → ${latestVersion}`}
       >
         <span className="text-brand/60">{haVersion}</span>
-        <ArrowUpRight size={11} className="shrink-0" />
+        <ArrowRight size={10} className="shrink-0 text-brand/50" aria-hidden="true" />
         <span className="font-semibold">{latestVersion}</span>
-      </span>
+      </Badge>
     );
   }
 
   if (updateAvailable) {
     return (
-      <span className="chip-info font-mono" title="Update available">
-        <span>{haVersion}</span>
-        <span className="text-brand/70">
-          · {pendingUpdates > 1 ? `${pendingUpdates} available` : 'update available'}
-        </span>
-      </span>
+      <Badge tone="brand" size={size} mono title={many ? `${pendingUpdates} updates available` : 'Update available'}>
+        {haVersion}
+        <span className="text-brand/70">· {many ? `${pendingUpdates} updates` : 'update'}</span>
+      </Badge>
     );
   }
 
-  return <span className="chip-neutral font-mono">{haVersion}</span>;
+  return <Badge tone="neutral" size={size} mono>{haVersion}</Badge>;
 }

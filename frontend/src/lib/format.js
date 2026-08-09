@@ -105,3 +105,73 @@ export const RAIL = {
   info: 'rail-info',
   idle: 'rail-idle',
 };
+
+/* ── Presentation helpers ─────────────────────────────────────────────────
+   Added with the v2 interface. The triage logic above is unchanged — these
+   only describe how a band is drawn, so the rules and the rendering stay in
+   one file and cannot drift apart. */
+
+/** Absolute timestamp, for tables and audit trails where "3h ago" is not enough. */
+export function absTime(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return '—';
+  return dt.toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
+}
+
+/** Clock time only — the date is usually implied by the group heading. */
+export function clockTime(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return '—';
+  return dt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+}
+
+export function dayLabel(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return '';
+  const today = new Date();
+  const yday = new Date(today);
+  yday.setDate(today.getDate() - 1);
+  const same = (a, b) => a.toDateString() === b.toDateString();
+  if (same(dt, today)) return 'Today';
+  if (same(dt, yday)) return 'Yesterday';
+  return dt.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+export function plural(n, one, many) {
+  return Number(n) === 1 ? one : (many || `${one}s`);
+}
+
+/**
+ * How each triage band is presented. One definition, used by the card, the
+ * table row, the dashboard sections and the filter chips, so a band can never
+ * be green in one place and grey in another.
+ */
+export const TRIAGE_META = {
+  down: { label: 'Offline',       tone: 'down',    rail: 'rail-down', color: '#FB7185', order: 0 },
+  warn: { label: 'Action needed', tone: 'warn',    rail: 'rail-warn', color: '#FBBF24', order: 1 },
+  info: { label: 'Update ready',  tone: 'brand',   rail: 'rail-info', color: '#38BDF8', order: 2 },
+  idle: { label: 'Not checked',   tone: 'neutral', rail: 'rail-idle', color: '#64748B', order: 3 },
+  live: { label: 'Healthy',       tone: 'live',    rail: 'rail-live', color: '#34D399', order: 4 },
+};
+
+/** Shared free-text match so search behaves identically on every screen. */
+export function matchesSite(c, term) {
+  const t = (term || '').trim().toLowerCase();
+  if (!t) return true;
+  return (
+    (c.name || '').toLowerCase().includes(t) ||
+    (c.locationName || '').toLowerCase().includes(t) ||
+    (c.url || '').toLowerCase().includes(t) ||
+    (c.hostname || '').toLowerCase().includes(t) ||
+    (c.group || '').toLowerCase().includes(t) ||
+    (c.haVersion || '').toLowerCase().includes(t) ||
+    (c.notes || '').toLowerCase().includes(t) ||
+    (c.tags || []).some((x) => (x || '').toLowerCase().includes(t))
+  );
+}
