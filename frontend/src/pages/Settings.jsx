@@ -14,6 +14,10 @@ import cn from '../lib/cn';
 
 const VERSION_BEFORE_KEY = 'ha-hub-version-before-update';
 
+// Shown if the status call hasn't returned yet, or if UPDATE_REPO is unset in
+// .env. Matches the backend's own default.
+const FALLBACK_REPO = 'https://github.com/marsh4200/ha-hub';
+
 /**
  * Settings.
  *
@@ -112,7 +116,7 @@ export default function Settings() {
 
   async function runUpdate() {
     const ok = await confirm({
-      title: 'Update HA-Hub now?',
+      title: 'Update AR Smart Home Server now?',
       message:
         'The latest code is pulled from GitHub and the containers rebuild. This takes roughly one to two minutes, during which the hub is briefly unavailable. You stay signed in and the page reloads itself when it is done.',
       details: info?.remote?.version
@@ -200,7 +204,7 @@ export default function Settings() {
       <PageHeader
         kicker="System"
         title="Settings"
-        description="Your account, the HA-Hub software itself, and the data you can take with you."
+        description="Your account, the AR Smart Home Server software itself, and the data you can take with you."
       />
 
       {justUpdated && (
@@ -286,7 +290,7 @@ export default function Settings() {
         <Card>
           <CardHeader
             icon={GitBranch}
-            title="HA-Hub software"
+            title="AR Smart Home Server"
             description="Pulls the latest code from GitHub and rebuilds the containers."
             actions={
               updateReady ? (
@@ -329,7 +333,15 @@ export default function Settings() {
                           <ExternalLink size={11} aria-hidden="true" />
                         </a>
                       ) : (
-                        '—'
+                        <a
+                          href={FALLBACK_REPO}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="focus-ring inline-flex items-center gap-1 rounded text-brand hover:underline"
+                        >
+                          <span className="truncate">{FALLBACK_REPO.replace(/^https?:\/\//, '')}</span>
+                          <ExternalLink size={11} aria-hidden="true" />
+                        </a>
                       )
                     }
                   />
@@ -404,7 +416,7 @@ export default function Settings() {
               label="Role"
               value={isAdmin ? 'Administrator — full access' : 'Standard — assigned sites only'}
             />
-            <InfoRow label="HA-Hub version" value={info?.local?.version || '—'} mono />
+            <InfoRow label="Server version" value={info?.local?.version || '—'} mono />
           </dl>
           <a
             href="/api/docs"
