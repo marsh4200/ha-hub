@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Download, KeyRound, RefreshCw, GitBranch, CheckCircle2, AlertCircle,
+  Download, KeyRound, RefreshCw, Server, CheckCircle2, AlertCircle,
   Sparkles, ArrowRight, Info, ExternalLink, User as UserIcon, Package,
 } from 'lucide-react';
 import api from '../services/api';
@@ -14,13 +14,11 @@ import cn from '../lib/cn';
 
 const VERSION_BEFORE_KEY = 'ha-hub-version-before-update';
 
-// Used if the status call hasn't returned yet, or if UPDATE_REPO is unset in
-// .env. Matches the backend's own default.
-const FALLBACK_REPO = 'https://github.com/marsh4200/ha-hub';
-
-// The Repository row links to GitHub but reads as the product name — the raw
-// URL is on the link's title attribute for anyone who wants it.
-const REPO_LABEL = 'AR Smart Home Server';
+// The software row is a branding line, not a source link: it names the product
+// and points at the company site. The actual update source stays server-side in
+// UPDATE_REPO and is never surfaced in the interface.
+const SOFTWARE_LABEL = 'AR Smart Home Server';
+const SOFTWARE_URL = 'https://www.arsmarthome.co.za';
 
 /**
  * Settings.
@@ -122,7 +120,7 @@ export default function Settings() {
     const ok = await confirm({
       title: 'Update AR Smart Home Server now?',
       message:
-        'The latest code is pulled from GitHub and the containers rebuild. This takes roughly one to two minutes, during which the hub is briefly unavailable. You stay signed in and the page reloads itself when it is done.',
+        'The latest code is pulled from the server and the containers rebuild. This takes roughly one to two minutes, during which the hub is briefly unavailable. You stay signed in and the page reloads itself when it is done.',
       details: info?.remote?.version
         ? `${info.local?.version || 'current'} → ${info.remote.version}`
         : 'Monitoring continues; sites are not affected.',
@@ -293,9 +291,9 @@ export default function Settings() {
       {isAdmin && (
         <Card>
           <CardHeader
-            icon={GitBranch}
+            icon={Server}
             title="AR Smart Home Server"
-            description="Pulls the latest code from GitHub and rebuilds the containers."
+            description="Pulls the latest code from the server and rebuilds the containers."
             actions={
               updateReady ? (
                 <Badge tone="brand">Update ready</Badge>
@@ -324,16 +322,15 @@ export default function Settings() {
                   )}
                   {info.remote?.sha && <InfoRow label="Latest commit" value={info.remote.sha} mono />}
                   <InfoRow
-                    label="Repository"
+                    label="Software"
                     value={
                       <a
-                        href={(info.repo || FALLBACK_REPO).replace('.git', '')}
+                        href={SOFTWARE_URL}
                         target="_blank"
                         rel="noreferrer"
-                        title={(info.repo || FALLBACK_REPO).replace('.git', '')}
                         className="focus-ring inline-flex items-center gap-1 rounded text-brand hover:underline"
                       >
-                        <span className="truncate">{REPO_LABEL}</span>
+                        <span className="truncate">{SOFTWARE_LABEL}</span>
                         <ExternalLink size={11} aria-hidden="true" />
                       </a>
                     }
