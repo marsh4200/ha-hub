@@ -14,9 +14,13 @@ import cn from '../lib/cn';
 
 const VERSION_BEFORE_KEY = 'ha-hub-version-before-update';
 
-// Shown if the status call hasn't returned yet, or if UPDATE_REPO is unset in
+// Used if the status call hasn't returned yet, or if UPDATE_REPO is unset in
 // .env. Matches the backend's own default.
 const FALLBACK_REPO = 'https://github.com/marsh4200/ha-hub';
+
+// The Repository row links to GitHub but reads as the product name — the raw
+// URL is on the link's title attribute for anyone who wants it.
+const REPO_LABEL = 'AR Smart Home Server';
 
 /**
  * Settings.
@@ -322,27 +326,16 @@ export default function Settings() {
                   <InfoRow
                     label="Repository"
                     value={
-                      info.repo ? (
-                        <a
-                          href={info.repo.replace('.git', '')}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="focus-ring inline-flex items-center gap-1 rounded text-brand hover:underline"
-                        >
-                          <span className="truncate">{info.repo.replace('.git', '').replace(/^https?:\/\//, '')}</span>
-                          <ExternalLink size={11} aria-hidden="true" />
-                        </a>
-                      ) : (
-                        <a
-                          href={FALLBACK_REPO}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="focus-ring inline-flex items-center gap-1 rounded text-brand hover:underline"
-                        >
-                          <span className="truncate">{FALLBACK_REPO.replace(/^https?:\/\//, '')}</span>
-                          <ExternalLink size={11} aria-hidden="true" />
-                        </a>
-                      )
+                      <a
+                        href={(info.repo || FALLBACK_REPO).replace('.git', '')}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={(info.repo || FALLBACK_REPO).replace('.git', '')}
+                        className="focus-ring inline-flex items-center gap-1 rounded text-brand hover:underline"
+                      >
+                        <span className="truncate">{REPO_LABEL}</span>
+                        <ExternalLink size={11} aria-hidden="true" />
+                      </a>
                     }
                   />
                 </dl>
