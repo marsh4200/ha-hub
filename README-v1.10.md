@@ -12,7 +12,7 @@ Large uploads are now split client-side into **80 MB parts**. Each part is its o
 - **Works remotely** — no new DNS record, TLS cert, port-forward, or exposed origin. Keeps using the tunnel you already have.
 - **Progress** — the bar shows `part 3/8` then `finalizing…`.
 - **Resumable-ish** — a failed upload calls an abort endpoint to clear staged parts server-side; just retry.
-- Same 800 MB overall limit, same magic-byte `.tar`/`.tar.gz` validation, same "one backup per client", same audit log.
+- Same 1.5 GB overall limit, same magic-byte `.tar`/`.tar.gz` validation, same "one backup per client", same audit log.
 
 ## Why not "send uploads straight to the server IP"?
 

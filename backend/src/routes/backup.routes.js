@@ -10,7 +10,7 @@ fsp.mkdir(TMP_DIR, { recursive: true }).catch(() => {});
 const upload = multer({
   dest: TMP_DIR,
   limits: {
-    fileSize: c.MAX_SIZE,   // 800 MB
+    fileSize: c.MAX_SIZE,   // 1.5 GB
     files: 1,
     fields: 5,
   },

@@ -2,7 +2,7 @@
 
 ## What's new
 
-📦 **Upload, store and download a backup `.tar` / `.tar.gz` per client**, up to 800 MB.
+📦 **Upload, store and download a backup `.tar` / `.tar.gz` per client**, up to 1.5 GB.
 
 - **One backup per client** — uploading a new one warns you and overwrites the old
 - **Admins** can upload, replace, and delete
@@ -79,4 +79,4 @@ The migration auto-runs on container startup (via `npx prisma migrate deploy` in
 
 ## ⚠️ Heads-up for the future
 
-If you ever put the portal behind **Cloudflare Tunnel itself**, note that Cloudflare's free tier has a **100 MB upload limit**. You'd hit that before the 800 MB app-side limit. Solutions: keep the portal on direct LAN access, or upgrade Cloudflare, or upload through a side channel.
+If you ever put the portal behind **Cloudflare Tunnel itself**, note that Cloudflare's free tier has a **100 MB upload limit**. You'd hit that before the 1.5 GB app-side limit. Solutions: keep the portal on direct LAN access, or upgrade Cloudflare, or upload through a side channel.

@@ -7,7 +7,7 @@ const prisma = require('../config/prisma');
 const { log } = require('../utils/logger');
 
 const BACKUP_ROOT = process.env.BACKUP_DIR || '/app/data/backups';
-const MAX_SIZE   = parseInt(process.env.BACKUP_MAX_SIZE_BYTES || String(800 * 1024 * 1024), 10); // 800 MB
+const MAX_SIZE   = parseInt(process.env.BACKUP_MAX_SIZE_BYTES || String(1536 * 1024 * 1024), 10); // 1.5 GB
 
 function clientDir(id) { return path.join(BACKUP_ROOT, id); }
 

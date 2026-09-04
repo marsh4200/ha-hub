@@ -51,7 +51,7 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/setup', authLimiter);
 
-// Don't time out long uploads (default 2 min is too short for 800 MB on slow links)
+// Don't time out long uploads (default 2 min is too short for 1.5 GB on slow links)
 server.requestTimeout = 30 * 60 * 1000;       // 30 min
 server.headersTimeout = 31 * 60 * 1000;
 server.timeout = 0;                            // no idle socket timeout

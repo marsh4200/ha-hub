@@ -337,7 +337,7 @@ export default function BackupCard({ client, isAdmin, onChange }) {
         </div>
 
         <p className="text-2xs leading-relaxed text-fg-faint">
-          Up to {bytes(info?.maxSize || 800 * 1024 * 1024)} · .tar or .tar.gz only · one backup per site.
+          Up to {bytes(info?.maxSize || 1536 * 1024 * 1024)} · .tar or .tar.gz only · one backup per site.
           Large files are uploaded in parts automatically.
         </p>
 
